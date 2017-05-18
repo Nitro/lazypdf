@@ -21,7 +21,7 @@ That should look like:
 
 ```go
 // #cgo CFLAGS: -I<relative path> -I<relative path>/mupdf-1.11-source/include -I<relative path>/mupdf-1.11-source/include/mupdf -I<relative path>/mupdf-1.11-source/thirdparty/openjpeg -I<relative path>/mupdf-1.11-source/thirdparty/jbig2dec -I<relative path>/mupdf-1.11-source/thirdparty/zlib -I<relative path>/mupdf-1.11-source/thirdparty/jpeg -I<relative path>/mupdf-1.11-source/thirdparty/freetype
-// #cgo LDFLAGS: -L<relative path>/mupdf-1.11-source/build/release -L<relative path>/mupdf-1.11-source/thirdparty/openjpeg/bin -lmupdf -lmupdfthird -lmutools -lmupdf-js-none -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
+// #cgo LDFLAGS: -L<relative path>/mupdf-1.11-source/build/release -lmupdf -lmupdfthird -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
 // #include <faster_raster.h>
 import "C"
 ```
