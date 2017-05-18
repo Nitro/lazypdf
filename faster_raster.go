@@ -269,7 +269,6 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	pixmap := C.fz_new_pixmap_with_bbox_and_data(
 		r.Ctx, C.fz_device_rgb(r.Ctx), bbox, 1, (*C.uchar)(unsafe.Pointer(&bytes[0])),
 	)
-	//pixmap := C.fz_new_pixmap_with_bbox(r.Ctx, C.fz_device_rgb(r.Ctx), bbox, 1)
 	C.fz_clear_pixmap_with_value(r.Ctx, pixmap, C.int(0xff))
 
 	// The rest we can background and let the main loop return to processing
