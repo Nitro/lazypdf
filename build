@@ -6,8 +6,7 @@ fi
 
 echo "Building muPDF..."
 cd mupdf-1.11-source
-make libs
-make build/release/libmutools.a
+make -j8 libs
 
 echo "Building Go application..."
 cd -
