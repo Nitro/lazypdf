@@ -210,8 +210,6 @@ func (r *Rasterizer) Stop() {
 		r.quitChan = nil
 	}
 
-	r.RequestChan = nil
-
 	C.free_locks(r.locks)
 	r.locks = nil // Don't leak a stale pointer
 }
@@ -232,7 +230,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 			// Nothing
 		default:
 			log.Warnf(
-				"Failed to reply for %s page %d, with bage page error",
+				"Failed to reply for %s page %d, with bad page error",
 				r.Filename, req.PageNumber,
 			)
 		}
@@ -264,7 +262,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	C.fz_run_page(r.Ctx, page, device, &C.fz_identity, nil)
 
 	bytes := make([]byte, 4*bbox.x1*bbox.y1)
-	// We take trhe Go buffer we made and pass a pointer into the C lib.
+	// We take the Go buffer we made and pass a pointer into the C lib.
 	// This lets Go manage the buffer lifecycle. Bytes are written
 	// back-to-back as RGBA starting at x,y,a 0,0,? .
 	// We'll free this C structure in a defer block later
