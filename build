@@ -1,0 +1,14 @@
+#!/bin/bash -e
+if [[ ! -d mupdf-1.11-source ]]; then
+	echo "Downloading muPDF..."
+	curl -L https://mupdf.com/downloads/mupdf-1.11-source.tar.gz | tar -xzf -
+fi
+
+echo "Building muPDF..."
+cd mupdf-1.11-source
+make libs
+make build/release/libmutools.a
+
+echo "Building Go application..."
+cd -
+go test -v
