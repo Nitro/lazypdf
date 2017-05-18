@@ -1,3 +1,5 @@
+// Package lazypdf provides a MuPDF-based document page rasterizer. It is managed
+// via the Rasterizer struct.
 package lazypdf
 
 import (
@@ -53,6 +55,21 @@ type RasterReply struct {
 	Error error
 }
 
+// Rasterizer is an actor that runs on an event loop processing a request channel.
+// Replies are asynchronous from the standpoint of the internals of the library
+// but the exported interface (via GeneratePage) is synchronous, using channels.
+//
+// If you need to use this asynchronously, you can directly insert entries into
+// the RequestChan.
+//
+// Lifecycle:
+// * The event loop is started up by calling the Run() function, which will
+//   allocate some resources and then start up a background Goroutine.
+// * You need to stop the event loop to remove the Goroutine and to free up
+//   any resources that have been allocated in the Run() function.
+// * Certain resources need to be freed synchronously and these are processed
+//   in the main event loop on the cleanUpChan to guarantee that there will
+//   not be a data race.
 type Rasterizer struct {
 	Filename    string
 	RequestChan chan *RasterRequest
@@ -73,6 +90,9 @@ func NewRasterizer(filename string) *Rasterizer {
 	}
 }
 
+// GeneratePage is a synchronous interface to the processing engine and will
+// return a Go stdlib image.Image. Asynchronous requests can be put directly
+// into the RequestChan if needed rather than calling this function.
 func (r *Rasterizer) GeneratePage(pageNumber int, width int) (image.Image, error) {
 	if !r.hasRun {
 		return nil, errors.New("Rasterizer has not been started!")
@@ -97,6 +117,8 @@ func (r *Rasterizer) GeneratePage(pageNumber int, width int) (image.Image, error
 	}
 }
 
+// Run starts the main even loop after allocating some resources. This needs to be
+// called before making any requests to rasterize pages.
 func (r *Rasterizer) Run() error {
 	// To prevent any leaking memory and nasty free/GC interactions, let's not allow
 	// this to be recycled. Just make a new one instead.
@@ -106,7 +128,8 @@ func (r *Rasterizer) Run() error {
 	r.hasRun = true
 
 	// Set up the locks for the context. We need these to get it to let us do
-	// multi-threaded processing.
+	// multi-threaded processing. These are pthread_mutex_t in C. There are
+	// FZ_LOCK_MAX of them (usually 4).
 	r.locks = C.new_locks()
 
 	// Allocate a new context and free it later
@@ -129,9 +152,12 @@ func (r *Rasterizer) Run() error {
 	return nil
 }
 
+// This is the main event loop for the rasterizer actor. It handles processing all
+// three channels and makes sure we don't have any concurrency issues on the shared
+// resources.
 func (r *Rasterizer) mainEventLoop() {
 	// Loop over the request channel, processing each entry in turn. This runs in the
-	// background until the r.RequestChan is closed.
+	// background until the r.quitChan is closed.
 	for {
 		select {
 		case req := <-r.RequestChan:
@@ -160,7 +186,8 @@ func (r *Rasterizer) mainEventLoop() {
 	C.fz_drop_context(r.Ctx)
 }
 
-// Stop shuts down the rasterizer
+// Stop shuts down the rasterizer and frees up some common data structures that
+// were allocated in the Run() method.
 func (r *Rasterizer) Stop() {
 	if r.RequestChan != nil {
 		close(r.RequestChan)
@@ -253,6 +280,8 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	go r.backgroundRender(ctx, pixmap, list, bounds, bbox, matrix, scaleFactor, bytes, req)
 }
 
+// backgroundRender handles the portion of the rasterization that can be done
+// without access to the main context.
 func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	pixmap *C.struct_fz_pixmap_s,
 	list *C.struct_fz_display_list_s,
