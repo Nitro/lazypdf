@@ -12,7 +12,7 @@ import (
 )
 
 // #cgo CFLAGS: -I. -I./mupdf-1.11-source/include -I./mupdf-1.11-source/include/mupdf -I./mupdf-1.11-source/thirdparty/openjpeg -I./mupdf-1.11-source/thirdparty/jbig2dec -I./mupdf-1.11-source/thirdparty/zlib -I./mupdf-1.11-source/thirdparty/jpeg -I./mupdf-1.11-source/thirdparty/freetype
-// #cgo LDFLAGS: -L./mupdf-1.11-source/build/release -L./mupdf-1.11-source/thirdparty/openjpeg/bin -lmupdf -lmupdfthird -lmutools -lmupdf-js-none -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
+// #cgo LDFLAGS: -L./mupdf-1.11-source/build/release -lmupdf -lmupdfthird -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
 // #include <faster_raster.h>
 import "C"
 
