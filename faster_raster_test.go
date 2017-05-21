@@ -4,6 +4,7 @@ import (
 	"image"
 	"sync"
 	"testing"
+	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -24,15 +25,21 @@ func Test_NewRasterizer(t *testing.T) {
 
 func Test_Run(t *testing.T) {
 	Convey("When Running and Stopping", t, func() {
-		raster := NewRasterizer("fixtures/sample.pdf")
-		err := raster.Run()
-
 		Convey("rasterizer starts without error", func() {
+			raster := NewRasterizer("fixtures/sample.pdf")
+			err := raster.Run()
+
 			So(err, ShouldBeNil)
 			raster.Stop()
 		})
 
-		Convey("rasterized stops", func() {
+		Convey("rasterizer stops", func() {
+			raster := NewRasterizer("fixtures/sample.pdf")
+			raster.Run()
+
+			// We have to give the background goroutine a little time to start :(
+			time.Sleep(5 * time.Millisecond)
+
 			raster.stopCompleted = make(chan struct{}) // Get notified when it's all stopped
 			raster.Stop()
 
