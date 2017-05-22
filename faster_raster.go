@@ -26,9 +26,6 @@ const (
 	// We'll keep a rasterizer around for 5 seconds max after the
 	// last request was received
 	RasterLifespan = 5 * time.Second
-
-	// The number of concurrent mutexes we'll allow
-	MutexCount = 4 // Should match FZ_LOCK_MAX
 )
 
 var (
