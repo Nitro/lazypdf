@@ -22,10 +22,6 @@ const (
 
 	// This many pages can be queued without blocking on the request
 	RasterBufferSize = 10
-
-	// We'll keep a rasterizer around for 5 seconds max after the
-	// last request was received
-	RasterLifespan = 5 * time.Second
 )
 
 var (
