@@ -17,22 +17,26 @@ import (
 import "C"
 
 const (
-	// We'll wait up to 10 seconds for a single page to Rasterize
+	// We'll wait up to 10 seconds for a single page to Rasterize.
 	RasterTimeout = 10 * time.Second
 
-	// This many pages can be queued without blocking on the request
+	// This many pages can be queued without blocking on the request.
 	RasterBufferSize = 10
 )
 
 var (
+	// A page was requested with an out of bounds page number.
 	ErrBadPage       = errors.New("invalid page number")
+	// We tried to rasterize the page, but we gave up waiting.
 	ErrRasterTimeout = errors.New("rasterizer timed out!")
 )
 
+// IsBadPage validates that the type of error was an ErrBadPage.
 func IsBadPage(err error) bool {
 	return err == ErrBadPage
 }
 
+// IsRasterTimeout validates that the type of error was an ErrRasterTimeout.
 func IsRasterTimeout(err error) bool {
 	return err == ErrRasterTimeout
 }
@@ -56,13 +60,13 @@ type RasterReply struct {
 // the RequestChan.
 //
 // Lifecycle:
-// * The event loop is started up by calling the Run() function, which will
-//   allocate some resources and then start up a background Goroutine.
-// * You need to stop the event loop to remove the Goroutine and to free up
-//   any resources that have been allocated in the Run() function.
-// * Certain resources need to be freed synchronously and these are processed
-//   in the main event loop on the cleanUpChan to guarantee that there will
-//   not be a data race.
+//  * The event loop is started up by calling the Run() function, which will
+//    allocate some resources and then start up a background Goroutine.
+//  * You need to stop the event loop to remove the Goroutine and to free up
+//    any resources that have been allocated in the Run() function.
+//  * Certain resources need to be freed synchronously and these are processed
+//    in the main event loop on the cleanUpChan to guarantee that there will
+//    not be a data race.
 type Rasterizer struct {
 	Filename    string
 	RequestChan chan *RasterRequest
