@@ -11,7 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-// #cgo CFLAGS: -I. -I./mupdf-1.11-source/include -I./mupdf-1.11-source/include/mupdf -I./mupdf-1.11-source/thirdparty/openjpeg -I./mupdf-1.11-source/thirdparty/jbig2dec -I./mupdf-1.11-source/thirdparty/zlib -I./mupdf-1.11-source/thirdparty/jpeg -I./mupdf-1.11-source/thirdparty/freetype
+// #cgo CFLAGS: -I. -I./mupdf-1.11-source/include -I./mupdf-1.11-source/include/mupdf -I./mupdf-1.11-source/thirdparty/openjpeg -I./mupdf-1.11-source/thirdparty/jbig2dec -I./mupdf-1.11-source/thirdparty/zlib -I./mupdf-1.11-source/thirdparty/jpeg -I./mupdf-1.11-source/thirdparty/freetype -g
 // #cgo LDFLAGS: -L./mupdf-1.11-source/build/release -lmupdf -lmupdfthird -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
 // #include <faster_raster.h>
 import "C"
@@ -26,7 +26,7 @@ const (
 
 var (
 	// A page was requested with an out of bounds page number.
-	ErrBadPage       = errors.New("invalid page number")
+	ErrBadPage = errors.New("invalid page number")
 	// We tried to rasterize the page, but we gave up waiting.
 	ErrRasterTimeout = errors.New("rasterizer timed out!")
 )
@@ -68,14 +68,15 @@ type RasterReply struct {
 //    in the main event loop on the cleanUpChan to guarantee that there will
 //    not be a data race.
 type Rasterizer struct {
-	Filename    string
-	RequestChan chan *RasterRequest
-	Ctx         *C.struct_fz_context_s
-	Document    *C.struct_fz_document_s
-	hasRun      bool
-	locks       *C.fz_locks_context
-	cleanUpChan chan func(*C.struct_fz_context_s)
-	quitChan    chan struct{}
+	Filename      string
+	RequestChan   chan *RasterRequest
+	Ctx           *C.struct_fz_context_s
+	Document      *C.struct_fz_document_s
+	hasRun        bool
+	locks         *C.fz_locks_context
+	cleanUpChan   chan func(*C.struct_fz_context_s)
+	quitChan      chan struct{}
+	stopCompleted chan struct{}
 }
 
 func NewRasterizer(filename string) *Rasterizer {
@@ -95,8 +96,11 @@ func (r *Rasterizer) GeneratePage(pageNumber int, width int) (image.Image, error
 		return nil, errors.New("Rasterizer has not been started!")
 	}
 
-	replyChan := make(chan *RasterReply)
+	if r.Ctx == nil || r.Document == nil {
+		return nil, errors.New("Rasterizer has been cleaned up! Cannot re-use")
+	}
 
+	replyChan := make(chan *RasterReply)
 	r.RequestChan <- &RasterRequest{
 		PageNumber: pageNumber,
 		Width:      width,
@@ -129,6 +133,10 @@ func (r *Rasterizer) Run() error {
 	// FZ_LOCK_MAX of them (usually 4).
 	r.locks = C.new_locks()
 
+	if r.locks == nil {
+		return errors.New("Unable to allocate locks!")
+	}
+
 	// Allocate a new context and free it later
 	r.Ctx = C.cgo_fz_new_context(nil, r.locks, C.FZ_STORE_UNLIMITED)
 
@@ -139,7 +147,11 @@ func (r *Rasterizer) Run() error {
 	cfilename := C.CString(r.Filename)
 
 	// Allocate/open a document in C and set it up to free later on
-	r.Document = C.fz_open_document(r.Ctx, cfilename)
+	r.Document = C.cgo_open_document(r.Ctx, cfilename)
+
+	if r.Document == nil {
+		return errors.New("Unable to open document: " + r.Filename + "!")
+	}
 
 	// Now that we've opened it, we can free the C memory for the string
 	C.free(unsafe.Pointer(cfilename))
@@ -179,14 +191,23 @@ OUTER:
 		}
 	}
 
-	// Some final resource cleanup in C memory space
-	C.fz_drop_document(r.Ctx, r.Document)
-	C.fz_drop_context(r.Ctx)
+	r.finalCleanUp()
 }
 
-// Stop shuts down the rasterizer and frees up some common data structures that
-// were allocated in the Run() method.
-func (r *Rasterizer) Stop() {
+func (r *Rasterizer) finalCleanUp() {
+
+	// Some final resource cleanup in C memory space
+	if r.Document != nil {
+		C.cgo_drop_document(r.Ctx, r.Document)
+		r.Document = nil
+	}
+
+	if r.Ctx != nil {
+		C.fz_drop_context(r.Ctx)
+		r.Ctx = nil
+	}
+
+	// It's now safe to close these
 	if r.RequestChan != nil {
 		close(r.RequestChan)
 		r.RequestChan = nil
@@ -203,13 +224,24 @@ func (r *Rasterizer) Stop() {
 
 	}
 
+	C.free_locks(r.locks)
+	r.locks = nil // Don't leak a stale pointer
+
+	// Used by tests that need to know when this is fully complete.
+	// stopCompleted is not normally allocated so it will be nil.
+	if r.stopCompleted != nil {
+		close(r.stopCompleted)
+	}
+}
+
+// Stop shuts down the rasterizer and frees up some common data structures that
+// were allocated in the Run() method.
+func (r *Rasterizer) Stop() {
+	// Send the quit signal to the mainEventLoop goroutine for this Rasterizer
 	if r.quitChan != nil {
 		close(r.quitChan)
 		r.quitChan = nil
 	}
-
-	C.free_locks(r.locks)
-	r.locks = nil // Don't leak a stale pointer
 }
 
 // processOne does all the work of actually rendering a page and is run
@@ -218,6 +250,16 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	scaleFactor := 1.0
 	bounds := new(C.fz_rect)
 	bbox := new(C.fz_irect)
+
+	if r.Ctx == nil || r.Document == nil {
+		select {
+		case req.ReplyChan <- &RasterReply{
+			Error: errors.New("Tried to process a page from a closed document: " + r.Filename),
+		}:
+			// nothing
+		}
+		return
+	}
 
 	pageCount := int(C.fz_count_pages(r.Ctx, r.Document))
 

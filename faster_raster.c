@@ -16,19 +16,50 @@ int cgo_ptr_cast(ptrdiff_t ptr) {
 	return (int)(ptr);
 }
 
+// Wrap fz_open_document, which uses a try/catch exception handler
+// that we can't easily use from Go.
+fz_document *cgo_open_document(fz_context *ctx, const char *filename) {
+    fz_document *doc = NULL;
+
+    fz_try(ctx) {
+		doc = fz_open_document(ctx, filename);
+	}
+	fz_catch(ctx) {
+        fprintf(stderr, "cannot open document: %s\n", fz_caught_message(ctx));
+		return NULL;
+	}
+
+	return doc;
+}
+
+// Wrap fz_drop_document to handle the exception trap when something is
+// wrong. We can't easily do this from Go.
+void cgo_drop_document(fz_context *ctx, fz_document *doc) {
+	fz_try(ctx) {
+		fz_drop_document(ctx, doc);
+	}
+	fz_catch(ctx) {
+        fprintf(stderr, "cannot drop document: %s\n", fz_caught_message(ctx));
+	}
+}
+
 // Calls back into the Go code to lock a mutex
 void lock_mutex(void *locks, int lock_no) {
 	pthread_mutex_t *m = (pthread_mutex_t *) locks;
-	if (pthread_mutex_lock(&m[lock_no]) != 0) {
-		fprintf(stderr, "lock_mutex failed!");
+	int result;
+
+	if ((result = pthread_mutex_lock(&m[lock_no])) != 0) {
+		fprintf(stderr, "lock_mutex failed! %s\n", strerror(result));
 	}
 }
 
 // Calls back into the Go code to lock a mutex
 void unlock_mutex(void *locks, int lock_no) {
 	pthread_mutex_t *m = (pthread_mutex_t *) locks;
-	if (pthread_mutex_unlock(&m[lock_no]) != 0) {
-		fprintf(stderr, "unlock_mutex failed!");
+	int result;
+
+	if ((result = pthread_mutex_unlock(&m[lock_no])) != 0) {
+		fprintf(stderr, "unlock_mutex failed! %s\n", strerror(result));
 	}
 }
 
@@ -36,12 +67,26 @@ void unlock_mutex(void *locks, int lock_no) {
 // the memory properly from Go.
 fz_locks_context *new_locks() {
 	fz_locks_context *locks = malloc(sizeof(fz_locks_context));
+
+	if (locks == NULL) {
+		fprintf(stderr, "Unable to allocate locks!\n");
+		return NULL;
+	}
+
 	pthread_mutex_t *mutexes =
 	    malloc(sizeof(pthread_mutex_t) * FZ_LOCK_MAX);
 
-	int i;
+	if (mutexes == NULL) {
+		fprintf(stderr, "Unable to allocate mutexes!\n");
+		return NULL;
+	}
+
+	int i, result;
 	for (i = 0; i < FZ_LOCK_MAX; i++) {
-		pthread_mutex_init(&mutexes[i], NULL);
+		result = pthread_mutex_init(&mutexes[i], NULL);
+		if (result != 0) {
+			fprintf(stderr, "Failed to initialize mutex: %s\n", strerror(result));
+		}
 	}
 
 	// Pass in the initialized mutexes and the two C funcs

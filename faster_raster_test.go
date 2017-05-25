@@ -33,7 +33,10 @@ func Test_Run(t *testing.T) {
 		})
 
 		Convey("rasterized stops", func() {
+			raster.stopCompleted = make(chan struct{}) // Get notified when it's all stopped
 			raster.Stop()
+
+			<-raster.stopCompleted
 			So(raster.RequestChan, ShouldBeNil)
 			So(raster.quitChan, ShouldBeNil)
 			So(raster.locks, ShouldBeNil)
@@ -47,6 +50,7 @@ func Test_Processing(t *testing.T) {
 		raster := NewRasterizer("fixtures/sample.pdf")
 
 		Convey("returns an error when the rasterizer has not started", func() {
+			raster := NewRasterizer("fixtures/sample.pdf")
 			raster.hasRun = false
 			_, err := raster.GeneratePage(1, 1024)
 
@@ -55,7 +59,9 @@ func Test_Processing(t *testing.T) {
 		})
 
 		Convey("returns an error on page out of bounds", func() {
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
+
 			img, err := raster.GeneratePage(3, 1024)
 
 			So(img, ShouldBeNil)
@@ -86,26 +92,44 @@ func Test_Processing(t *testing.T) {
 			var err1, err2, err3, err4 error
 			var img1, img2, img3, img4 image.Image
 
+			// These are used in the goroutines instead of checking imgX individually
+			// as ShouldNotBeNil, because something about the copying in the test
+			// framework seems to make that take about 1 second each! Doing it this
+			// way shaves about 3 seconds off the tests.
+			var ok1, ok2, ok3, ok4 bool
+
 			var wg sync.WaitGroup
 			wg.Add(8)
 
 			go func() {
 				img1, err1 = raster.GeneratePage(1, 1024)
+				if img1 != nil {
+					ok1 = true
+				}
 				wg.Done()
 			}()
 
 			go func() {
 				img2, err2 = raster.GeneratePage(1, 1024)
+				if img2 != nil {
+					ok2 = true
+				}
 				wg.Done()
 			}()
 
 			go func() {
 				img3, err3 = raster.GeneratePage(2, 1024)
+				if img3 != nil {
+					ok3 = true
+				}
 				wg.Done()
 			}()
 
 			go func() {
 				img4, err4 = raster.GeneratePage(2, 1024)
+				if img4 != nil {
+					ok4 = true
+				}
 				wg.Done()
 			}()
 
@@ -120,10 +144,10 @@ func Test_Processing(t *testing.T) {
 			wg.Wait()
 
 			// Checking these is really slow... about 1 second each
-			So(img1, ShouldNotBeNil)
-			So(img2, ShouldNotBeNil)
-			So(img3, ShouldNotBeNil)
-			So(img4, ShouldNotBeNil)
+			So(ok1, ShouldBeTrue)
+			So(ok2, ShouldBeTrue)
+			So(ok3, ShouldBeTrue)
+			So(ok4, ShouldBeTrue)
 
 			So(err1, ShouldBeNil)
 			So(err2, ShouldBeNil)
