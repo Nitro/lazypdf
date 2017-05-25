@@ -296,10 +296,10 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	list := C.fz_new_display_list(r.Ctx, bounds)
 
 	device := C.fz_new_list_device(r.Ctx, list)
-	defer C.fz_close_device(r.Ctx, device)
-	defer C.fz_drop_device(r.Ctx, device)
 
 	C.fz_run_page(r.Ctx, page, device, &C.fz_identity, nil)
+	C.fz_close_device(r.Ctx, device)
+	C.fz_drop_device(r.Ctx, device)
 
 	bytes := make([]byte, 4*bbox.x1*bbox.y1)
 	// We take the Go buffer we made and pass a pointer into the C lib.
