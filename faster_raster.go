@@ -138,7 +138,7 @@ func (r *Rasterizer) Run() error {
 	}
 
 	// Allocate a new context and free it later
-	r.Ctx = C.cgo_fz_new_context(nil, r.locks, C.FZ_STORE_UNLIMITED)
+	r.Ctx = C.cgo_fz_new_context(nil, r.locks, C.FZ_STORE_DEFAULT)
 
 	// Register the default document type handlers
 	C.fz_register_document_handlers(r.Ctx)
@@ -279,7 +279,6 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 
 	// Load the page and allocate C structure, freed later
 	page := C.fz_load_page(r.Ctx, r.Document, C.int(req.PageNumber-1))
-	defer C.fz_drop_page(r.Ctx, page)
 
 	C.fz_bound_page(r.Ctx, page, bounds)
 	if req.Width != 0 {
@@ -300,6 +299,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	C.fz_run_page(r.Ctx, page, device, &C.fz_identity, nil)
 	C.fz_close_device(r.Ctx, device)
 	C.fz_drop_device(r.Ctx, device)
+	C.fz_drop_page(r.Ctx, page)
 
 	bytes := make([]byte, 4*bbox.x1*bbox.y1)
 	// We take the Go buffer we made and pass a pointer into the C lib.
@@ -338,7 +338,6 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 
 	// Set up the draw device from the cloned context
 	drawDevice := C.fz_new_draw_device(ctx, &matrix, pixmap)
-	//defer C.fz_drop_device(r.Ctx, drawDevice)
 
 	// Take the commands from the display list and run them on the
 	// draw device
@@ -352,6 +351,9 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	rgbaImage := &image.RGBA{
 		Pix: bytes, Stride: int(C.cgo_ptr_cast(pixmap.stride)), Rect: goBounds,
 	}
+
+	// Free the cloned context
+	C.fz_drop_context(ctx)
 
 	// Try to reply, but don't get stuck if something happened to the channel
 	select {
