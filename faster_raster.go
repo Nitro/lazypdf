@@ -151,6 +151,7 @@ func (r *Rasterizer) Run() error {
 func (r *Rasterizer) mainEventLoop() {
 	// Loop over the request channel, processing each entry in turn. This runs in the
 	// background until the r.quitChan is closed.
+OUTER:
 	for {
 		select {
 		case req := <-r.RequestChan:
@@ -170,7 +171,7 @@ func (r *Rasterizer) mainEventLoop() {
 
 			fn(r.Ctx)
 		case <-r.quitChan:
-			break
+			break OUTER
 		}
 	}
 
@@ -302,7 +303,9 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	log.Debugf("Pixmap w: %d, h: %d, scale: %.2f", pixmap.w, pixmap.h, scaleFactor)
 
 	goBounds := image.Rect(int(bbox.x0), int(bbox.y0), int(bbox.x1), int(bbox.y1))
-	rgbaImage := &image.RGBA{bytes, int(C.cgo_ptr_cast(pixmap.stride)), goBounds}
+	rgbaImage := &image.RGBA{
+		Pix: bytes, Stride: int(C.cgo_ptr_cast(pixmap.stride)), Rect: goBounds,
+	}
 
 	// Try to reply, but don't get stuck if something happened to the channel
 	select {
