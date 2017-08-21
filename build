@@ -10,4 +10,5 @@ make -j8 libs
 
 echo "Building Go application..."
 cd -
+go get ./...
 go test -v
