@@ -38,10 +38,3 @@ import "C"
 `<relative path>` in this case should be the relative location of this library
 to your project. If you are building a Go project under the `github.com/Nitro`
 folder, this would usually be `../lazypdf`.
-
-License
--------
-
-This is Copyright 2017 Nitro Software. All Rights Reserved.
-
-This is private and confidential, not for public release.
