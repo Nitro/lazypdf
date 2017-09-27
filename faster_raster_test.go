@@ -89,6 +89,51 @@ func Test_Processing(t *testing.T) {
 			raster.Stop()
 		})
 
+		Convey("returns an image with the correct width when specified", func() {
+			if testing.Short() {
+				return
+			}
+
+			raster.Run()
+			img, err := raster.GeneratePage(2, 1024, 0)
+
+			So(img, ShouldNotBeNil)
+			So(err, ShouldBeNil)
+
+			So(img.Bounds().Max.X, ShouldEqual, 1024)
+			raster.Stop()
+		})
+
+		Convey("returns an image with the correct scale factor when specified", func() {
+			if testing.Short() {
+				return
+			}
+
+			raster.Run()
+			img, err := raster.GeneratePage(2, 0, 1.1)
+
+			So(img, ShouldNotBeNil)
+			So(err, ShouldBeNil)
+
+			So(img.Bounds().Max.X, ShouldEqual, 655)
+			raster.Stop()
+		})
+
+		Convey("the width takes precedence over the scale factor", func() {
+			if testing.Short() {
+				return
+			}
+
+			raster.Run()
+			img, err := raster.GeneratePage(2, 1024, 1.1) // Specify BOTH
+
+			So(img, ShouldNotBeNil)
+			So(err, ShouldBeNil)
+
+			So(img.Bounds().Max.X, ShouldEqual, 1024) // Should match -> width <-
+			raster.Stop()
+		})
+
 		Convey("handles more than one page image at a time", func() {
 			if testing.Short() {
 				return
