@@ -59,7 +59,7 @@ func Test_Processing(t *testing.T) {
 		Convey("returns an error when the rasterizer has not started", func() {
 			raster := NewRasterizer("fixtures/sample.pdf")
 			raster.hasRun = false
-			_, err := raster.GeneratePage(1, 1024)
+			_, err := raster.GeneratePage(1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has not been started")
@@ -69,7 +69,7 @@ func Test_Processing(t *testing.T) {
 			err := raster.Run()
 			So(err, ShouldBeNil)
 
-			img, err := raster.GeneratePage(3, 1024)
+			img, err := raster.GeneratePage(3, 1024, 0)
 
 			So(img, ShouldBeNil)
 			So(err, ShouldEqual, ErrBadPage)
@@ -82,7 +82,7 @@ func Test_Processing(t *testing.T) {
 			}
 
 			raster.Run()
-			img, err := raster.GeneratePage(2, 1024)
+			img, err := raster.GeneratePage(2, 1024, 0)
 
 			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
@@ -109,7 +109,7 @@ func Test_Processing(t *testing.T) {
 			wg.Add(8)
 
 			go func() {
-				img1, err1 = raster.GeneratePage(1, 1024)
+				img1, err1 = raster.GeneratePage(1, 1024, 0)
 				if img1 != nil {
 					ok1 = true
 				}
@@ -117,7 +117,7 @@ func Test_Processing(t *testing.T) {
 			}()
 
 			go func() {
-				img2, err2 = raster.GeneratePage(1, 1024)
+				img2, err2 = raster.GeneratePage(1, 1024, 0)
 				if img2 != nil {
 					ok2 = true
 				}
@@ -125,7 +125,7 @@ func Test_Processing(t *testing.T) {
 			}()
 
 			go func() {
-				img3, err3 = raster.GeneratePage(2, 1024)
+				img3, err3 = raster.GeneratePage(2, 1024, 0)
 				if img3 != nil {
 					ok3 = true
 				}
@@ -133,7 +133,7 @@ func Test_Processing(t *testing.T) {
 			}()
 
 			go func() {
-				img4, err4 = raster.GeneratePage(2, 1024)
+				img4, err4 = raster.GeneratePage(2, 1024, 0)
 				if img4 != nil {
 					ok4 = true
 				}
@@ -143,7 +143,7 @@ func Test_Processing(t *testing.T) {
 			// Generate some more contention
 			for i := 0; i < 4; i++ {
 				go func() {
-					raster.GeneratePage(i%2+1, 1024)
+					raster.GeneratePage(i%2+1, 1024, 0)
 					wg.Done()
 				}()
 			}

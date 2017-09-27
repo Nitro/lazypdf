@@ -101,7 +101,12 @@ func (r *Rasterizer) GeneratePage(pageNumber int, width int, scale float64) (ima
 		return nil, errors.New("Rasterizer has been cleaned up! Cannot re-use")
 	}
 
-	replyChan := make(chan *RasterReply)
+	// This channel must be buffered, or there is a race on the reply. If we
+	// don't start listening on the channel yet by the time the reply comes, then
+	// we will wait until the RasterTimeout and miss the returned response.
+	replyChan := make(chan *RasterReply, 1)
+
+	// Pass the request to the rendering function via the channel
 	r.RequestChan <- &RasterRequest{
 		PageNumber: pageNumber,
 		Width:      width,
