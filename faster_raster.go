@@ -44,6 +44,7 @@ func IsRasterTimeout(err error) bool {
 type RasterRequest struct {
 	PageNumber int
 	Width      int
+	Scale      float64
 	ReplyChan  chan *RasterReply
 }
 
@@ -91,7 +92,7 @@ func NewRasterizer(filename string) *Rasterizer {
 // GeneratePage is a synchronous interface to the processing engine and will
 // return a Go stdlib image.Image. Asynchronous requests can be put directly
 // into the RequestChan if needed rather than calling this function.
-func (r *Rasterizer) GeneratePage(pageNumber int, width int) (image.Image, error) {
+func (r *Rasterizer) GeneratePage(pageNumber int, width int, scale float64) (image.Image, error) {
 	if !r.hasRun {
 		return nil, errors.New("Rasterizer has not been started!")
 	}
@@ -104,6 +105,7 @@ func (r *Rasterizer) GeneratePage(pageNumber int, width int) (image.Image, error
 	r.RequestChan <- &RasterRequest{
 		PageNumber: pageNumber,
 		Width:      width,
+		Scale:      scale,
 		ReplyChan:  replyChan,
 	}
 
@@ -244,10 +246,17 @@ func (r *Rasterizer) Stop() {
 	}
 }
 
-// processOne does all the work of actually rendering a page and is run
-// in a loop from Run().
+//  processOne does all the work of actually rendering a page and is run in a loop
+//  from Run(). In rendering you can supply either the fixed output width, or a
+//  scale factor. If not supplied, scale factor will default to 1.5. If supplied it
+//  will be used. Width overrides any scale factor and will be rendered to as close
+//  to that exact dimension as possible, if it's supplied.
 func (r *Rasterizer) processOne(req *RasterRequest) {
 	scaleFactor := 1.0
+	if req.Scale > 0 {
+		scaleFactor = req.Scale
+	}
+
 	bounds := new(C.fz_rect)
 	bbox := new(C.fz_irect)
 
@@ -281,6 +290,8 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	page := C.fz_load_page(r.Ctx, r.Document, C.int(req.PageNumber-1))
 
 	C.fz_bound_page(r.Ctx, page, bounds)
+
+	// If width is set, override any previous scale factor and use that explicitly
 	if req.Width != 0 {
 		scaleFactor = float64(C.float(req.Width) / bounds.x1)
 	}
