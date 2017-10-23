@@ -57,7 +57,6 @@ func Test_Processing(t *testing.T) {
 		raster := NewRasterizer("fixtures/sample.pdf")
 
 		Convey("returns an error when the rasterizer has not started", func() {
-			raster := NewRasterizer("fixtures/sample.pdf")
 			raster.hasRun = false
 			_, err := raster.GeneratePage(1, 1024, 0)
 
@@ -131,6 +130,33 @@ func Test_Processing(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 1024) // Should match -> width <-
+			raster.Stop()
+		})
+
+		Convey("figures out the scale factor based on page format", func() {
+			if testing.Short() {
+				return
+			}
+
+			// PORTRAIT
+			raster.Run()
+			img, err := raster.GeneratePage(2, 0, 0) // Specify NEITHER scale nor width
+
+			So(img, ShouldNotBeNil)
+			So(err, ShouldBeNil)
+
+			So(img.Bounds().Max.X, ShouldEqual, 893) // Portrait file, should be 1.5 scaling
+			raster.Stop()
+
+			// LANDSCAPE
+			raster = NewRasterizer("fixtures/landscape-sample.pdf")
+			raster.Run()
+
+			img, err = raster.GeneratePage(1, 0, 0) // Specify NEITHER scale nor width
+			So(img, ShouldNotBeNil)
+			So(err, ShouldBeNil)
+
+			So(img.Bounds().Max.X, ShouldEqual, 842) // Landscape file, should be 1.5 scaling
 			raster.Stop()
 		})
 

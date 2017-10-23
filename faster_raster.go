@@ -22,6 +22,9 @@ const (
 
 	// This many pages can be queued without blocking on the request.
 	RasterBufferSize = 10
+
+	LandscapeScale = 1.0
+	PortraitScale = 1.5
 )
 
 var (
@@ -251,17 +254,32 @@ func (r *Rasterizer) Stop() {
 	}
 }
 
+// scalePage figures out how we're going to scale the page when rasterizing.
+func scalePage(page *C.fz_page, bounds *C.fz_rect, req *RasterRequest) float64 {
+	// If width is set, override any previous scale factor and use that explicitly
+	if req.Width != 0 {
+		return float64(C.float(req.Width) / bounds.x1)
+	}
+
+	// If the scale was requested, use that
+	if req.Scale != 0 {
+		return req.Scale
+	}
+
+	// Figure out if it's landscape format, and scale by 1.0
+	if (bounds.y1 - bounds.y0) < (bounds.x1 - bounds.x0) {
+		return LandscapeScale
+	}
+
+	return PortraitScale
+}
+
 //  processOne does all the work of actually rendering a page and is run in a loop
 //  from Run(). In rendering you can supply either the fixed output width, or a
 //  scale factor. If not supplied, scale factor will default to 1.5. If supplied it
 //  will be used. Width overrides any scale factor and will be rendered to as close
 //  to that exact dimension as possible, if it's supplied.
 func (r *Rasterizer) processOne(req *RasterRequest) {
-	scaleFactor := 1.0
-	if req.Scale > 0 {
-		scaleFactor = req.Scale
-	}
-
 	bounds := new(C.fz_rect)
 	bbox := new(C.fz_irect)
 
@@ -296,10 +314,8 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 
 	C.fz_bound_page(r.Ctx, page, bounds)
 
-	// If width is set, override any previous scale factor and use that explicitly
-	if req.Width != 0 {
-		scaleFactor = float64(C.float(req.Width) / bounds.x1)
-	}
+	// Do the logic to figure out how we scale this thing.
+	scaleFactor := scalePage(page, bounds, req)
 
 	var matrix C.fz_matrix
 	C.fz_scale(&matrix, C.float(scaleFactor), C.float(scaleFactor))
