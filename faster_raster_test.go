@@ -156,7 +156,7 @@ func Test_Processing(t *testing.T) {
 			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
 
-			So(img.Bounds().Max.X, ShouldEqual, 842) // Landscape file, should be 1.5 scaling
+			So(img.Bounds().Max.X, ShouldEqual, 842) // Landscape file, should be 1.0 scaling
 			raster.Stop()
 		})
 
