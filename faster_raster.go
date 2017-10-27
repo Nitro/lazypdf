@@ -79,6 +79,7 @@ type Rasterizer struct {
 	hasRun        bool
 	locks         *C.fz_locks_context
 	cleanUpChan   chan func(*C.struct_fz_context_s)
+	scaleFactor   float64
 	quitChan      chan struct{}
 	stopCompleted chan struct{}
 }
@@ -204,6 +205,8 @@ OUTER:
 	r.finalCleanUp()
 }
 
+// finalCleanup is called the event loop has shut down and takes care of the
+// cleanup of the document, channels, etc.
 func (r *Rasterizer) finalCleanUp() {
 
 	// Some final resource cleanup in C memory space
@@ -254,24 +257,67 @@ func (r *Rasterizer) Stop() {
 	}
 }
 
-// scalePage figures out how we're going to scale the page when rasterizing.
-func scalePage(page *C.fz_page, bounds *C.fz_rect, req *RasterRequest) float64 {
-	// If width is set, override any previous scale factor and use that explicitly
-	if req.Width != 0 {
-		return float64(C.float(req.Width) / bounds.x1)
-	}
+// getRotation is used by tests to test the C rotation functions since you can't
+// call Cgo directly from tests.
+func (r *Rasterizer) getRotation(pageNum int) int {
+	page := C.fz_load_page(r.Ctx, r.Document, C.int(pageNum-1))
+	defer C.fz_drop_page(r.Ctx, page)
 
-	// If the scale was requested, use that
-	if req.Scale != 0 {
-		return req.Scale
+	rotation := C.get_rotation(r.Ctx, page)
+	return int(rotation)
+}
+
+// scalePage figures out how we're going to scale the page when rasterizing. If
+// with width is set, we just do that. Otherwise if the scale is set we do that.
+// Next we check the bounding box to find lanscape pages and scale them less.
+// Finally we look at page rotation to see if it was rotated +/- 90 degrees. If
+// it was rotated, we leave it PortraitScale.
+func (r *Rasterizer) scalePage(page *C.fz_page, bounds *C.fz_rect, req *RasterRequest) float64 {
+	// It's nil when called from calculateScaleForDocument
+	if req != nil {
+		// If width is set, override any previous scale factor and use that explicitly
+		if req.Width != 0 {
+			return float64(C.float(req.Width) / bounds.x1)
+		}
+
+		// If the scale was requested, use that
+		if req.Scale != 0 {
+			return req.Scale
+		}
 	}
 
 	// Figure out if it's landscape format, and scale by 1.0
 	if (bounds.y1 - bounds.y0) < (bounds.x1 - bounds.x0) {
+		// This purposely calls the C function not getRotation, which is only for tests
+		rotation := C.get_rotation(r.Ctx, page)
+		// Was it a rotated portrait page? If so, scale it PortraitScale
+		if rotation != 0 && rotation != 180 { // Ignore weird rotations
+			return PortraitScale
+		}
+
 		return LandscapeScale
 	}
 
 	return PortraitScale
+}
+
+// calculateScaleForDocument goes through all the bounding boxes of all the pages
+// in the document and tries to figure out if any of them are landscape pages. If
+// so, it will default to LandscapeScale.
+func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
+	bounds := new(C.fz_rect)
+
+	var page *C.fz_page
+	for i := 0; i < pageCount; i++ {
+		page = C.fz_load_page(r.Ctx, r.Document, C.int(i))
+		C.fz_bound_page(r.Ctx, page, bounds)
+		r.scaleFactor = r.scalePage(page, bounds, nil)
+		C.fz_drop_page(r.Ctx, page)
+
+		if r.scaleFactor == LandscapeScale {
+			break
+		}
+	}
 }
 
 //  processOne does all the work of actually rendering a page and is run in a loop
@@ -314,11 +360,17 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 
 	C.fz_bound_page(r.Ctx, page, bounds)
 
-	// Do the logic to figure out how we scale this thing.
-	scaleFactor := scalePage(page, bounds, req)
+	// If we haven't already scaled this thing, and the request doesn't specify
+	// then let's scale it for the whole doc.
+	if r.scaleFactor == 0 && req.Width == 0 && req.Scale == 0 {
+		r.calculateScaleForDocument(pageCount)
+	} else {
+		// Do the logic to figure out how we scale this thing.
+		r.scaleFactor = r.scalePage(page, bounds, req)
+	}
 
 	var matrix C.fz_matrix
-	C.fz_scale(&matrix, C.float(scaleFactor), C.float(scaleFactor))
+	C.fz_scale(&matrix, C.float(r.scaleFactor), C.float(r.scaleFactor))
 
 	C.fz_transform_rect(bounds, &matrix)
 	C.fz_round_rect(bbox, bounds)
@@ -346,7 +398,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// The rest we can background and let the main loop return to processing
 	// any additional pages that have been requested!
 	ctx := C.fz_clone_context(r.Ctx)
-	go r.backgroundRender(ctx, pixmap, list, bounds, bbox, matrix, scaleFactor, bytes, req)
+	go r.backgroundRender(ctx, pixmap, list, bounds, bbox, matrix, r.scaleFactor, bytes, req)
 }
 
 // backgroundRender handles the portion of the rasterization that can be done

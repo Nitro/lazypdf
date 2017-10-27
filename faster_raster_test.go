@@ -52,6 +52,80 @@ func Test_Run(t *testing.T) {
 	})
 }
 
+func Test_getRotation(t *testing.T) {
+	Convey("Identifies the page rotation", t, func() {
+		raster := NewRasterizer("fixtures/rotated-sample.pdf")
+		raster.Run()
+
+		So(raster.getRotation(1), ShouldEqual, 180)
+		So(raster.getRotation(2), ShouldEqual, 0)
+
+		raster.Stop()
+	})
+}
+
+func Test_scalePage(t *testing.T) {
+	Convey("Doing silly calculations on page rotation and scaling", t, func() {
+		Convey("handles landscape pages", func() {
+			Convey("as LandscapeScale when pages really are", func() {
+				raster := NewRasterizer("fixtures/landscape-sample.pdf")
+				raster.Run()
+
+				img, err := raster.GeneratePage(1, 0, 0)
+
+				So(err, ShouldBeNil)
+				So(img.Bounds().Max.X, ShouldEqual, 842)
+
+				raster.Stop()
+			})
+
+			Convey("as PortraitScale when pages were rotated", func() {
+				raster := NewRasterizer("fixtures/rotated-sample.pdf")
+				raster.Run()
+				img, err := raster.GeneratePage(1, 0, 0)
+
+				So(err, ShouldBeNil)
+				So(img.Bounds().Max.X, ShouldEqual, 842)
+
+				raster.Stop()
+			})
+		})
+
+		Convey("handles portrait pages as PortraitScale", func() {
+			raster := NewRasterizer("fixtures/sample.pdf")
+			raster.Run()
+			img, err := raster.GeneratePage(1, 0, 0)
+
+			So(err, ShouldBeNil)
+			So(img.Bounds().Max.X, ShouldEqual, 893)
+
+			raster.Stop()
+		})
+
+		Convey("uses LandscapeScale if any page is landscape", func() {
+			raster := NewRasterizer("fixtures/mixed-sample.pdf")
+			raster.Run()
+			img, err := raster.GeneratePage(2, 0, 0)
+
+			So(err, ShouldBeNil)
+			So(img.Bounds().Max.X, ShouldEqual, 612)
+
+			raster.Stop()
+		})
+
+		Convey("uses specified scale if there is one", func() {
+			raster := NewRasterizer("fixtures/mixed-sample.pdf")
+			raster.Run()
+			img, err := raster.GeneratePage(2, 0, 0.5)
+
+			So(err, ShouldBeNil)
+			So(img.Bounds().Max.X, ShouldEqual, 306)
+
+			raster.Stop()
+		})
+	})
+}
+
 func Test_Processing(t *testing.T) {
 	Convey("When processing the file", t, func() {
 		raster := NewRasterizer("fixtures/sample.pdf")
