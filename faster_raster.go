@@ -24,7 +24,7 @@ const (
 	RasterBufferSize = 10
 
 	LandscapeScale = 1.0
-	PortraitScale = 1.5
+	PortraitScale  = 1.5
 )
 
 var (
