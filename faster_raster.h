@@ -1,5 +1,9 @@
 #include <fitz.h>
+#include <pdf/name-table.h>
+#include <pdf/object.h>
+#include <pdf/document.h>
 #include <pthread.h>
+#include <pdf/page.h>
 
 // indent -linux -br -brf
 
@@ -16,3 +20,4 @@ void lock_mutex(void *locks, int lock_no);
 void unlock_mutex(void *locks, int lock_no);
 fz_locks_context *new_locks();
 void free_locks(fz_locks_context * locks);
+int get_rotation(fz_context *ctx, fz_page *page);
