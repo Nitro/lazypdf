@@ -18,14 +18,15 @@ int cgo_ptr_cast(ptrdiff_t ptr) {
 
 // Wrap fz_open_document, which uses a try/catch exception handler
 // that we can't easily use from Go.
-fz_document *cgo_open_document(fz_context *ctx, const char *filename) {
-    fz_document *doc = NULL;
+fz_document *cgo_open_document(fz_context * ctx, const char *filename) {
+	fz_document *doc = NULL;
 
-    fz_try(ctx) {
+	fz_try(ctx) {
 		doc = fz_open_document(ctx, filename);
 	}
 	fz_catch(ctx) {
-        fprintf(stderr, "cannot open document: %s\n", fz_caught_message(ctx));
+		fprintf(stderr, "cannot open document: %s\n",
+			fz_caught_message(ctx));
 		return NULL;
 	}
 
@@ -34,12 +35,13 @@ fz_document *cgo_open_document(fz_context *ctx, const char *filename) {
 
 // Wrap fz_drop_document to handle the exception trap when something is
 // wrong. We can't easily do this from Go.
-void cgo_drop_document(fz_context *ctx, fz_document *doc) {
+void cgo_drop_document(fz_context * ctx, fz_document * doc) {
 	fz_try(ctx) {
 		fz_drop_document(ctx, doc);
 	}
 	fz_catch(ctx) {
-        fprintf(stderr, "cannot drop document: %s\n", fz_caught_message(ctx));
+		fprintf(stderr, "cannot drop document: %s\n",
+			fz_caught_message(ctx));
 	}
 }
 
@@ -85,7 +87,8 @@ fz_locks_context *new_locks() {
 	for (i = 0; i < FZ_LOCK_MAX; i++) {
 		result = pthread_mutex_init(&mutexes[i], NULL);
 		if (result != 0) {
-			fprintf(stderr, "Failed to initialize mutex: %s\n", strerror(result));
+			fprintf(stderr, "Failed to initialize mutex: %s\n",
+				strerror(result));
 		}
 	}
 
@@ -106,46 +109,44 @@ void free_locks(fz_locks_context * locks) {
 }
 
 // Read a property from the PDF object by key name
-static pdf_obj *pdf_lookup_inherited_page_item(fz_context *ctx, pdf_obj *node, pdf_obj *key)
-{
-    pdf_obj *node2 = node;
-    pdf_obj *val;
+static pdf_obj *pdf_lookup_inherited_page_item(fz_context * ctx, pdf_obj * node,
+					       pdf_obj * key) {
+	pdf_obj *node2 = node;
+	pdf_obj *val;
 
-    fz_try(ctx)
-    {
-        do
-        {
-            val = pdf_dict_get(ctx, node, key);
-            if (val)
-                break;
-            if (pdf_mark_obj(ctx, node))
-                fz_throw(ctx, FZ_ERROR_GENERIC, "cycle in page tree (parents)");
-            node = pdf_dict_get(ctx, node, PDF_NAME_Parent);
-        }
-        while (node);
-    }
-    fz_always(ctx)
-    {
-        do
-        {
-            pdf_unmark_obj(ctx, node2);
-            if (node2 == node)
-                break;
-            node2 = pdf_dict_get(ctx, node2, PDF_NAME_Parent);
-        }
-        while (node2);
-    }
-    fz_catch(ctx)
-    {
-        fz_rethrow(ctx);
-    }
+	fz_try(ctx) {
+		do {
+			val = pdf_dict_get(ctx, node, key);
+			if (val)
+				break;
+			if (pdf_mark_obj(ctx, node))
+				fz_throw(ctx, FZ_ERROR_GENERIC,
+					 "cycle in page tree (parents)");
+			node = pdf_dict_get(ctx, node, PDF_NAME_Parent);
+		}
+		while (node);
+	}
+	fz_always(ctx) {
+		do {
+			pdf_unmark_obj(ctx, node2);
+			if (node2 == node)
+				break;
+			node2 = pdf_dict_get(ctx, node2, PDF_NAME_Parent);
+		}
+		while (node2);
+	}
+	fz_catch(ctx) {
+		fz_rethrow(ctx);
+	}
 
-    return val;
+	return val;
 }
 
 // Return an integer representing the rotation of a page in degrees
-int get_rotation(fz_context *ctx, fz_page *page) {
+int get_rotation(fz_context * ctx, fz_page * page) {
 	// We know we have a pdf_page here in 'page' so we cast it to a pdf_page *
-	pdf_obj *page_obj = ((pdf_page *)page)->obj;
-	return pdf_to_int(ctx, pdf_lookup_inherited_page_item(ctx, page_obj, PDF_NAME_Rotate));
+	pdf_obj *page_obj = ((pdf_page *) page)->obj;
+	return pdf_to_int(ctx,
+			  pdf_lookup_inherited_page_item(ctx, page_obj,
+							 PDF_NAME_Rotate));
 }
