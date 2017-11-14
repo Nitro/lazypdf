@@ -16,4 +16,4 @@ fi
 echo "Building Go application..."
 cd -
 go get ./...
-go test -v --run getRotation
+go test -v --run getSVG
