@@ -1,5 +1,8 @@
 #include "faster_raster.h"
 
+#include <stdio.h>
+#include <string.h>
+
 // Format with:
 // indent -linux -br -brf
 

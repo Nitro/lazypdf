@@ -1,11 +1,11 @@
 #!/bin/bash -e
-if [[ ! -d mupdf-1.11-source ]]; then
+if [[ ! -d mupdf-1.12.0-source ]]; then
 	echo "Downloading muPDF..."
-	curl -L https://nitro-build-assets.s3.amazonaws.com/lazypdf/mupdf-1.11-source.tar.gz | tar -xzf -
+	curl -L https://nitro-build-assets.s3.amazonaws.com/lazypdf/mupdf-1.12.0-source.tar.gz | tar -xzf -
 fi
 
 echo "Building muPDF..."
-cd mupdf-1.11-source
+cd mupdf-1.12.0-source
 make -j8 libs
 
 echo "Building Go application..."
