@@ -1,7 +1,7 @@
 #!/bin/bash -e
 if [[ ! -d mupdf-1.11-source ]]; then
 	echo "Downloading muPDF..."
-	curl -L https://mupdf.com/downloads/mupdf-1.11-source.tar.gz | tar -xzf -
+	curl -L https://nitro-build-assets.s3.amazonaws.com/lazypdf/mupdf-1.11-source.tar.gz | tar -xzf -
 fi
 
 echo "Building muPDF..."
