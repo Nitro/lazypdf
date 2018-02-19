@@ -8,6 +8,11 @@ echo "Building muPDF..."
 cd mupdf-1.12.0-source
 make -j8 libs
 
+# Newer OSX needs an include path for OpenSSL
+if [[ `uname -s` == "Darwin" ]]; then
+	export CGO_LDFLAGS="-L/usr/local/opt/openssl/lib"
+fi
+
 echo "Building Go application..."
 cd -
 go get ./...
