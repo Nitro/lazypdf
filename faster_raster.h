@@ -5,6 +5,8 @@
 #include <pthread.h>
 #include <pdf/page.h>
 
+#include <stdlib.h>
+
 // indent -linux -br -brf
 
 // The number of mutexes we'll allocate

@@ -11,8 +11,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// #cgo CFLAGS: -I. -I./mupdf-1.11-source/include -I./mupdf-1.11-source/include/mupdf -I./mupdf-1.11-source/thirdparty/openjpeg -I./mupdf-1.11-source/thirdparty/jbig2dec -I./mupdf-1.11-source/thirdparty/zlib -I./mupdf-1.11-source/thirdparty/jpeg -I./mupdf-1.11-source/thirdparty/freetype -g
-// #cgo LDFLAGS: -L./mupdf-1.11-source/build/release -lmupdf -lmupdfthird -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
+// #cgo CFLAGS: -I. -I./mupdf-1.12.0-source/include -I./mupdf-1.12.0-source/include/mupdf -I./mupdf-1.12.0-source/thirdparty/openjpeg -I./mupdf-1.12.0-source/thirdparty/jbig2dec -I./mupdf-1.12.0-source/thirdparty/zlib -I./mupdf-1.12.0-source/thirdparty/jpeg -I./mupdf-1.12.0-source/thirdparty/freetype -g
+// #cgo LDFLAGS: -L./mupdf-1.12.0-source/build/release -lmupdf -lmupdfthird -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
 // #include <faster_raster.h>
 import "C"
 
@@ -391,7 +391,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// back-to-back as RGBA starting at x,y,a 0,0,? .
 	// We'll free this C structure in a defer block later
 	pixmap := C.fz_new_pixmap_with_bbox_and_data(
-		r.Ctx, C.fz_device_rgb(r.Ctx), bbox, 1, (*C.uchar)(unsafe.Pointer(&bytes[0])),
+		r.Ctx, C.fz_device_rgb(r.Ctx), bbox, nil, 1, (*C.uchar)(unsafe.Pointer(&bytes[0])),
 	)
 	C.fz_clear_pixmap_with_value(r.Ctx, pixmap, C.int(0xff))
 
