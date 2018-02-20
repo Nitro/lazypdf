@@ -126,6 +126,33 @@ func Test_scalePage(t *testing.T) {
 	})
 }
 
+func Test_WithoutFileExtensions(t *testing.T) {
+	Convey("When the file has no file extension", t, func() {
+		Convey("but it is a PDF file, so it should work", func() {
+			raster := NewRasterizer("fixtures/sample_no_extension")
+			raster.Run()
+
+			_, err := raster.GeneratePage(1, 1024, 0)
+			So(err, ShouldBeNil)
+
+			raster.Stop()
+		})
+
+		Convey("but it is hot garbage, so it should fail", func() {
+			raster := NewRasterizer("fixtures/bad_data")
+			err := raster.Run()
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "Unable to open document")
+
+			_, err = raster.GeneratePage(1, 1024, 0)
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "has been cleaned up")
+
+			raster.Stop()
+		})
+	})
+}
+
 func Test_Processing(t *testing.T) {
 	Convey("When processing the file", t, func() {
 		raster := NewRasterizer("fixtures/sample.pdf")

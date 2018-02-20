@@ -32,6 +32,8 @@ var (
 	ErrBadPage = errors.New("invalid page number")
 	// We tried to rasterize the page, but we gave up waiting.
 	ErrRasterTimeout = errors.New("rasterizer timed out!")
+
+	defaultExtension = C.CString(".pdf")
 )
 
 // IsBadPage validates that the type of error was an ErrBadPage.
@@ -154,18 +156,16 @@ func (r *Rasterizer) Run() error {
 	// Register the default document type handlers
 	C.fz_register_document_handlers(r.Ctx)
 
-	// Allocate a C string from the Go filename string, free it later
+	// Allocate a C strings, from the Go filename. Free later
 	cfilename := C.CString(r.Filename)
+	defer C.free(unsafe.Pointer(cfilename))
 
 	// Allocate/open a document in C and set it up to free later on
-	r.Document = C.cgo_open_document(r.Ctx, cfilename)
+	r.Document = C.cgo_open_document(r.Ctx, cfilename, defaultExtension)
 
 	if r.Document == nil {
 		return errors.New("Unable to open document: " + r.Filename + "!")
 	}
-
-	// Now that we've opened it, we can free the C memory for the string
-	C.free(unsafe.Pointer(cfilename))
 
 	go r.mainEventLoop()
 
