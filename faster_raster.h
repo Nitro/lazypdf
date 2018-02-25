@@ -1,9 +1,4 @@
 #include <fitz.h>
-#include <pdf/name-table.h>
-#include <pdf/object.h>
-#include <pdf/document.h>
-#include <pthread.h>
-#include <pdf/page.h>
 
 #include <stdlib.h>
 
@@ -24,3 +19,5 @@ void unlock_mutex(void *locks, int lock_no);
 fz_locks_context *new_locks();
 void free_locks(fz_locks_context * locks);
 int get_rotation(fz_context *ctx, fz_page *page);
+void register_load_system_font_callback(fz_context *ctx);
+fz_font *load_system_font(fz_context *ctx, char *name, int bold, int italic);

@@ -4,10 +4,13 @@ package lazypdf
 
 import (
 	"errors"
+	"fmt"
 	"image"
+	"strings"
 	"time"
 	"unsafe"
 
+	"github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -25,6 +28,8 @@ const (
 
 	LandscapeScale = 1.0
 	PortraitScale  = 1.5
+
+	FontCacheSize = 25
 )
 
 var (
@@ -34,6 +39,11 @@ var (
 	ErrRasterTimeout = errors.New("rasterizer timed out!")
 
 	defaultExtension = C.CString(".pdf")
+
+	// Available system font names mapped to their file paths.
+	systemFontPaths map[string]string
+	// LRU cache of fz_font objects corresponding to loaded system fonts.
+	fontCache *lru.Cache
 )
 
 // IsBadPage validates that the type of error was an ErrBadPage.
@@ -56,6 +66,61 @@ type RasterRequest struct {
 type RasterReply struct {
 	Image image.Image
 	Error error
+}
+
+func SetSystemFonts(fontPaths map[string]string) {
+	systemFontPaths = fontPaths
+}
+
+// LoadSystemFont is a callback which gets invoked by MuPDF on the C side
+// when it cannot find a usable embedded or internal font.
+//export LoadSystemFont
+func LoadSystemFont(ctx *C.struct_fz_context_s, cgoName *C.char, cgoBold, cgoItalic C.int,
+) *C.struct_fz_font_s {
+	// This is a quick and dirty hack... SumatraPDF Reader has a lot more logic for doing this "properly".
+	// See here for details: https://github.com/sumatrapdfreader/sumatrapdf/blob/f0431d8846b8927750a6f6b2f7affa646c9b9f36/mupdf/source/pdf/pdf-fontfile.c
+	// Also here for a version pulled from k2pdfopt: https://github.com/robamler/mupdf-nacl/blob/857a39d59b8d3f9e27b051210bb3b142f761112b/source/pdf/pdf-fontfile.c
+	// Also, we could use the Noto fonts by compiling MuPDF with -DHAVE_ANDROID, but we'd still need
+	// some custom logic to map font names to the proper Noto font.
+
+	name := C.GoString(cgoName)
+	bold := int(cgoBold)
+	italic := int(cgoItalic)
+	log.Debugf("Requesting font '%s' (bold=%d, italic=%d)", name, bold, italic)
+
+	// Bail out early if we don't have any system fonts installed
+	if systemFontPaths == nil {
+		return nil
+	}
+
+	// Trim PS and / or MT suffixes
+	for strings.HasSuffix(name, "PS") || strings.HasSuffix(name, "MT") {
+		name = name[:len(name)-2]
+	}
+
+	if bold != 0 && italic != 0 {
+		name = fmt.Sprintf("%sBoldItalic", name)
+	} else if bold != 0 {
+		name = fmt.Sprintf("%sBold", name)
+	} else if italic != 0 {
+		name = fmt.Sprintf("%sItalic", name)
+	}
+
+	if font, ok := fontCache.Get(name); ok {
+		return font.(*C.struct_fz_font_s)
+	}
+
+	if path, ok := systemFontPaths[name]; ok {
+		log.Debugf("Loading font '%s' from file '%s'", name, path)
+
+		font := C.load_system_font(ctx, C.CString(path), C.int(bold), C.int(italic))
+
+		fontCache.Add(name, font)
+
+		return font
+	}
+
+	return nil
 }
 
 // Rasterizer is an actor that runs on an event loop processing a request channel.
@@ -152,6 +217,18 @@ func (r *Rasterizer) Run() error {
 
 	// Allocate a new context and free it later
 	r.Ctx = C.cgo_fz_new_context(nil, r.locks, C.FZ_STORE_DEFAULT)
+
+	// If we know that there are system fonts available, we initialize
+	// the font cache and register the LoadSystemFont callback.
+	if systemFontPaths != nil {
+		var err error
+		fontCache, err = lru.NewWithEvict(FontCacheSize, r.onEvictFont)
+		if err != nil {
+			return errors.New("Unable to initialize the system font cache!")
+		}
+
+		C.register_load_system_font_callback(r.Ctx)
+	}
 
 	// Register the default document type handlers
 	C.fz_register_document_handlers(r.Ctx)
@@ -453,4 +530,12 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 // could leak some memory.
 func (r *Rasterizer) cleanUp(fn func(*C.struct_fz_context_s)) {
 	r.cleanUpChan <- fn
+}
+
+func (r *Rasterizer) onEvictFont(key interface{}, value interface{}) {
+	font := value.(*C.struct_fz_font_s)
+
+	// Relinquish ownership of the font and allow MuPDF to drop it
+	// when it no longer needs it
+	C.fz_drop_font(r.Ctx, font)
 }

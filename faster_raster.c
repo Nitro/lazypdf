@@ -1,7 +1,11 @@
+#include "_cgo_export.h"
 #include "faster_raster.h"
+
+#include <pdf.h>
 
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 
 // Format with:
 // indent -linux -br -brf
@@ -190,4 +194,31 @@ int get_rotation(fz_context * ctx, fz_page * page) {
 	return pdf_to_int(ctx,
 			  pdf_lookup_inherited_page_item(ctx, page_obj,
 							 PDF_NAME_Rotate));
+}
+
+fz_font *load_system_font(fz_context * ctx, char *name, int bold, int italic) {
+	fz_font *font;
+	fz_try(ctx)
+	    font = fz_new_font_from_file(ctx, NULL, name, 0, 0);
+	fz_catch(ctx)
+	    return NULL;
+
+	// Retain ownership of the loaded font
+	fz_keep_font(ctx, font);
+
+	return font;
+}
+
+// Go does not provide const types, so we need to create a wrapper for LoadSystemFont which casts name to char *
+struct fz_font_s *load_system_font_proxy(fz_context * ctx, const char *name,
+					 int bold, int italic,
+					 int /* unused */ needs_exact_metrics) {
+	// TODO: Investigate what is the intent of needs_exact_metrics
+	// SumatraPDF Reader makes use of it. See comment in LoadSystemFont
+	return LoadSystemFont(ctx, (char *)name, bold, italic);
+}
+
+void register_load_system_font_callback(fz_context * ctx) {
+	fz_install_load_system_font_funcs(ctx, load_system_font_proxy, NULL,
+					  NULL);
 }
