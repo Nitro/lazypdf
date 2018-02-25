@@ -12,8 +12,8 @@
 
 // Have to wrap this macro so we can call from Cgo
 fz_context *cgo_fz_new_context(const fz_alloc_context * alloc,
-				   const fz_locks_context * locks,
-				   size_t max_store) {
+			       const fz_locks_context * locks,
+			       size_t max_store) {
 	return fz_new_context(alloc, locks, max_store);
 }
 
@@ -25,7 +25,8 @@ int cgo_ptr_cast(ptrdiff_t ptr) {
 
 // Wrap fz_open_document, which uses a try/catch exception handler
 // that we can't easily use from Go.
-fz_document *cgo_open_document(fz_context *ctx, const char *filename, const char *default_ext) {
+fz_document *cgo_open_document(fz_context * ctx, const char *filename,
+			       const char *default_ext) {
 	fz_document *doc = NULL;
 	int failed = 0;
 
@@ -33,13 +34,16 @@ fz_document *cgo_open_document(fz_context *ctx, const char *filename, const char
 		doc = fz_open_document(ctx, filename);
 	}
 	fz_catch(ctx) {
-		fprintf(stderr, "Trying with default file extension for '%s'", filename);
+		fprintf(stderr, "Trying with default file extension for '%s'",
+			filename);
 		failed = 1;
 	}
 
-	if(failed) {
+	if (failed) {
 		fz_try(ctx) {
-			doc = open_document_with_extension(ctx, filename, default_ext);
+			doc =
+			    open_document_with_extension(ctx, filename,
+							 default_ext);
 		}
 		fz_catch(ctx) {
 			fprintf(stderr, "cannot open document '%s': %s\n",
@@ -51,7 +55,9 @@ fz_document *cgo_open_document(fz_context *ctx, const char *filename, const char
 	return doc;
 }
 
-fz_document *open_document_with_extension(fz_context *ctx, const char *filename, const char *default_ext) {
+fz_document *open_document_with_extension(fz_context * ctx,
+					  const char *filename,
+					  const char *default_ext) {
 	const fz_document_handler *handler;
 	fz_stream *file;
 	fz_document *doc = NULL;
@@ -59,8 +65,8 @@ fz_document *open_document_with_extension(fz_context *ctx, const char *filename,
 	handler = fz_recognize_document(ctx, default_ext);
 	if (!handler)
 		fz_throw(ctx, FZ_ERROR_GENERIC,
-			"cannot find doc handler for file extension: %s for document '%s'",
-			default_ext, filename);
+			 "cannot find doc handler for file extension: %s for document '%s'",
+			 default_ext, filename);
 
 	if (handler->open)
 		return handler->open(ctx, filename);
@@ -68,15 +74,14 @@ fz_document *open_document_with_extension(fz_context *ctx, const char *filename,
 	file = fz_open_file(ctx, filename);
 
 	fz_try(ctx)
-		doc = handler->open_with_stream(ctx, file);
+	    doc = handler->open_with_stream(ctx, file);
 	fz_always(ctx)
-		fz_drop_stream(ctx, file);
+	    fz_drop_stream(ctx, file);
 	fz_catch(ctx)
-		fz_rethrow(ctx);
+	    fz_rethrow(ctx);
 
 	return doc;
 }
-
 
 // Wrap fz_drop_document to handle the exception trap when something is
 // wrong. We can't easily do this from Go.
@@ -121,7 +126,7 @@ fz_locks_context *new_locks() {
 	}
 
 	pthread_mutex_t *mutexes =
-		malloc(sizeof(pthread_mutex_t) * FZ_LOCK_MAX);
+	    malloc(sizeof(pthread_mutex_t) * FZ_LOCK_MAX);
 
 	if (mutexes == NULL) {
 		fprintf(stderr, "Unable to allocate mutexes!\n");
@@ -155,7 +160,7 @@ void free_locks(fz_locks_context * locks) {
 
 // Read a property from the PDF object by key name
 static pdf_obj *pdf_lookup_inherited_page_item(fz_context * ctx, pdf_obj * node,
-						   pdf_obj * key) {
+					       pdf_obj * key) {
 	pdf_obj *node2 = node;
 	pdf_obj *val;
 
@@ -213,8 +218,8 @@ fz_font *load_system_font(fz_context * ctx, char *name, int bold, int italic) {
 struct fz_font_s *load_system_font_proxy(fz_context * ctx, const char *name,
 					 int bold, int italic,
 					 int /* unused */ needs_exact_metrics) {
-	// TODO: Investigate what is the intent of needs_exact_metrics
-	// SumatraPDF Reader makes use of it. See comment in LoadSystemFont
+	// TODO: Investigate what is the intent of needs_exact_metrics.
+	// SumatraPDF Reader makes use of it. See comment in LoadSystemFont.
 	return LoadSystemFont(ctx, (char *)name, bold, italic);
 }
 
