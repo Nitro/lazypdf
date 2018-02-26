@@ -98,11 +98,13 @@ func LoadSystemFont(ctx *C.struct_fz_context_s, cgoName *C.char, cgoBold, cgoIta
 		name = name[:len(name)-2]
 	}
 
-	if bold != 0 && italic != 0 {
-		name = fmt.Sprintf("%sBoldItalic", name)
-	} else if bold != 0 {
+	// Remove spaces
+	name = strings.Replace(name, " ", "", -1)
+
+	if bold != 0 {
 		name = fmt.Sprintf("%sBold", name)
-	} else if italic != 0 {
+	}
+	if italic != 0 {
 		name = fmt.Sprintf("%sItalic", name)
 	}
 
