@@ -201,10 +201,11 @@ int get_rotation(fz_context * ctx, fz_page * page) {
 							 PDF_NAME_Rotate));
 }
 
-fz_font *load_system_font(fz_context * ctx, char *name, int bold, int italic) {
+fz_font *load_system_font(fz_context * ctx, char *path, int bold, int italic) {
 	fz_font *font;
 	fz_try(ctx)
-	    font = fz_new_font_from_file(ctx, NULL, name, 0, 0);
+	    // Note: We could load the font under a different name, if needed
+	    font = fz_new_font_from_file(ctx, NULL, path, 0, 0);
 	fz_catch(ctx)
 	    return NULL;
 
