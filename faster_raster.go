@@ -41,10 +41,13 @@ var (
 	defaultExtension = C.CString(".pdf")
 
 	// Available system font names mapped to their file paths.
-	systemFontPaths map[string]string
+	systemFontPaths FontPaths
 	// LRU cache of fz_font objects corresponding to loaded system fonts.
 	fontCache *lru.Cache
 )
+
+// FontPaths is a map of font names and font file paths
+type FontPaths map[string]string
 
 // IsBadPage validates that the type of error was an ErrBadPage.
 func IsBadPage(err error) bool {
@@ -68,7 +71,7 @@ type RasterReply struct {
 	Error error
 }
 
-func SetSystemFonts(fontPaths map[string]string) {
+func SetSystemFonts(fontPaths FontPaths) {
 	systemFontPaths = fontPaths
 }
 
