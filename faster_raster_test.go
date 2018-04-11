@@ -65,12 +65,12 @@ func Test_getRotation(t *testing.T) {
 	})
 }
 
-func Test_getSVG(t *testing.T) {
+func Test_GetSVG(t *testing.T) {
 	Convey("Does some useful things", t, func() {
 		raster := NewRasterizer("fixtures/sample.pdf")
 		raster.Run()
 
-		buf := raster.getSVG(1)
+		buf := raster.GetSVG(1)
 		So(buf, ShouldNotBeEmpty)
 
 		err := ioutil.WriteFile("out.svg", buf, 0644)

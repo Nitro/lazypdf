@@ -267,7 +267,7 @@ func (r *Rasterizer) getRotation(pageNum int) int {
 	return int(rotation)
 }
 
-func (r *Rasterizer) getSVG(pageNum int) []byte {
+func (r *Rasterizer) GetSVG(pageNum int) []byte {
 	cfilename := C.CString(r.Filename)
 	defer C.free(unsafe.Pointer(cfilename))
 
