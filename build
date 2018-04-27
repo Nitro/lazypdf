@@ -1,11 +1,17 @@
 #!/bin/bash -e
-if [[ ! -d mupdf-1.12.0-source ]]; then
+
+MUPDF_VERSION="1.13.0"
+
+if [[ ! -d mupdf ]]; then
 	echo "Downloading muPDF..."
-	curl -L https://nitro-build-assets.s3.amazonaws.com/lazypdf/mupdf-1.12.0-source.tar.gz | tar -xzf -
+	git clone git@github.com:ArtifexSoftware/mupdf.git
+	( cd mupdf && git checkout -q ${MUPDF_VERSION} )
+	( cd mupdf/thirdparty && git submodule init && git submodule update --recursive )
 fi
 
 echo "Building muPDF..."
-cd mupdf-1.12.0-source
+cd mupdf
+
 make -j8 libs
 
 # Newer OSX needs an include path for OpenSSL
