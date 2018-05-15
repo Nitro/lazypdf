@@ -144,10 +144,10 @@ fz_locks_context *new_locks() {
 
 // Free the lock structure in C since we allocated the memory
 // here.
-void free_locks(fz_locks_context * locks) {
-	free(locks->user);
-	free(locks);
-	locks = NULL;
+void free_locks(fz_locks_context ** locks) {
+	free((*locks)->user);
+	free(*locks);
+	*locks = NULL;
 }
 
 // Read a property from the PDF object by key name
