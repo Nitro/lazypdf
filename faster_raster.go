@@ -70,9 +70,6 @@ type RasterReply struct {
 //    allocate some resources and then start up a background Goroutine.
 //  * You need to stop the event loop to remove the Goroutine and to free up
 //    any resources that have been allocated in the Run() function.
-//  * Certain resources need to be freed synchronously and these are processed
-//    in the main event loop on the cleanUpChan to guarantee that there will
-//    not be a data race.
 type Rasterizer struct {
 	Filename      string
 	RequestChan   chan *RasterRequest
@@ -80,7 +77,6 @@ type Rasterizer struct {
 	Document      *C.struct_fz_document_s
 	hasRun        bool
 	locks         *C.fz_locks_context
-	cleanUpChan   chan func(*C.struct_fz_context_s)
 	scaleFactor   float64
 	quitChan      chan struct{}
 	stopCompleted chan struct{}
@@ -90,7 +86,6 @@ func NewRasterizer(filename string) *Rasterizer {
 	return &Rasterizer{
 		Filename:    filename,
 		RequestChan: make(chan *RasterRequest, RasterBufferSize),
-		cleanUpChan: make(chan func(*C.struct_fz_context_s)),
 		quitChan:    make(chan struct{}),
 	}
 }
@@ -186,17 +181,6 @@ OUTER:
 				continue // happens on channel close
 			}
 			r.processOne(req)
-		case fn := <-r.cleanUpChan:
-			if fn == nil {
-				continue // happens on channel close
-			}
-
-			if r.Ctx == nil {
-				log.Warn("Asked to free resources but context was nil!")
-				continue
-			}
-
-			fn(r.Ctx)
 		case <-r.quitChan:
 			r.quitChan = nil
 			break OUTER
@@ -225,17 +209,6 @@ func (r *Rasterizer) finalCleanUp() {
 	if r.RequestChan != nil {
 		close(r.RequestChan)
 		r.RequestChan = nil
-	}
-
-	if r.cleanUpChan != nil {
-		// We might end up stranding memory without freeing it. Log to see if this
-		// actually happens.
-		if len(r.cleanUpChan) > 0 {
-			log.Warnf("leaving %d cleanup requests unserviced!", len(r.cleanUpChan))
-		}
-		close(r.cleanUpChan)
-		r.cleanUpChan = nil
-
 	}
 
 	C.free_locks(r.locks)
@@ -412,12 +385,14 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	bytes []byte,
 	req *RasterRequest,
 ) {
-
 	// Clean up earlier allocated C data structures when we've completed this
-	defer r.cleanUp(func(ctx *C.struct_fz_context_s) {
+	defer func() {
 		C.fz_drop_pixmap(ctx, pixmap)
 		C.fz_drop_display_list(ctx, list)
-	})
+
+		// Free the cloned context
+		C.fz_drop_context(ctx)
+	}()
 
 	// Set up the draw device from the cloned context
 	drawDevice := C.fz_new_draw_device(ctx, &matrix, pixmap)
@@ -435,9 +410,6 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 		Pix: bytes, Stride: int(C.cgo_ptr_cast(pixmap.stride)), Rect: goBounds,
 	}
 
-	// Free the cloned context
-	C.fz_drop_context(ctx)
-
 	// Try to reply, but don't get stuck if something happened to the channel
 	select {
 	case req.ReplyChan <- &RasterReply{Image: rgbaImage}:
@@ -445,11 +417,4 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	default:
 		log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
 	}
-}
-
-// Queue up some clean up work to be done for freeing memory. This is not a perfect
-// solution. If the whole cleanUpChan is not processed before Stop() is called, we
-// could leak some memory.
-func (r *Rasterizer) cleanUp(fn func(*C.struct_fz_context_s)) {
-	r.cleanUpChan <- fn
 }
