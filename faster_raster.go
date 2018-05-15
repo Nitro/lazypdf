@@ -198,6 +198,7 @@ OUTER:
 
 			fn(r.Ctx)
 		case <-r.quitChan:
+			r.quitChan = nil
 			break OUTER
 		}
 	}
@@ -238,7 +239,6 @@ func (r *Rasterizer) finalCleanUp() {
 	}
 
 	C.free_locks(r.locks)
-	r.locks = nil // Don't leak a stale pointer
 
 	// Used by tests that need to know when this is fully complete.
 	// stopCompleted is not normally allocated so it will be nil.
@@ -253,7 +253,6 @@ func (r *Rasterizer) Stop() {
 	// Send the quit signal to the mainEventLoop goroutine for this Rasterizer
 	if r.quitChan != nil {
 		close(r.quitChan)
-		r.quitChan = nil
 	}
 }
 

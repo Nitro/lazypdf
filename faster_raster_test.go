@@ -314,8 +314,9 @@ func Test_Processing(t *testing.T) {
 
 			// Generate some more contention
 			for i := 0; i < 4; i++ {
+				page := i%2 + 1
 				go func() {
-					raster.GeneratePage(i%2+1, 1024, 0)
+					raster.GeneratePage(page, 1024, 0)
 					wg.Done()
 				}()
 			}
