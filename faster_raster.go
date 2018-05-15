@@ -198,6 +198,7 @@ OUTER:
 
 			fn(r.Ctx)
 		case <-r.quitChan:
+			r.quitChan = nil
 			break OUTER
 		}
 	}
@@ -253,7 +254,6 @@ func (r *Rasterizer) Stop() {
 	// Send the quit signal to the mainEventLoop goroutine for this Rasterizer
 	if r.quitChan != nil {
 		close(r.quitChan)
-		r.quitChan = nil
 	}
 }
 
