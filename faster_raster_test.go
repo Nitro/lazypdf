@@ -17,7 +17,6 @@ func Test_NewRasterizer(t *testing.T) {
 			So(raster.Filename, ShouldEqual, "foo")
 			So(raster.RequestChan, ShouldNotBeNil)
 			So(raster.quitChan, ShouldNotBeNil)
-			So(raster.cleanUpChan, ShouldNotBeNil)
 			So(raster.hasRun, ShouldBeFalse)
 		})
 	})
