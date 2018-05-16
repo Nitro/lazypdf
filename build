@@ -4,7 +4,7 @@ MUPDF_VERSION="1.13.0"
 
 if [[ ! -d mupdf ]]; then
 	echo "Downloading muPDF..."
-	git clone git@github.com:ArtifexSoftware/mupdf.git
+	git clone https://github.com/ArtifexSoftware/mupdf.git
 	( cd mupdf && git checkout -q ${MUPDF_VERSION} )
 	( cd mupdf/thirdparty && git submodule init && git submodule update --recursive )
 fi
