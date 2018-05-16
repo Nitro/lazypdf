@@ -1,0 +1,13 @@
+language: go
+
+go:
+  - 1.10.x
+
+sudo: required
+
+before_install:
+  - sudo apt-get install -y libjpeg62 zlib1g libjbig2dec0 libjbig2dec0-dev libfreetype6 libpng12-0 ca-certificates
+  - ./build
+
+script:
+  - go test -v -race --timeout 1m

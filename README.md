@@ -1,6 +1,8 @@
 LazyPDF
 =======
 
+[![](https://travis-ci.org/Nitro/lazypdf.svg?branch=master)](https://travis-ci.org/Nitro/lazypdf)
+
 This is a rasterizing engine for PDF documents, built around MuPDF. It exports
 a Go interface that allows the creation of a `Rasterizer` for each document you
 wish to be able to rasterize to images.  It generated Go `image.Image`s and you
