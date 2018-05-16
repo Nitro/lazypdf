@@ -79,6 +79,7 @@ type Rasterizer struct {
 	hasRun             bool
 	locks              *C.fz_locks_context
 	scaleFactor        float64
+	docPageCount       int
 	quitChan           chan struct{}
 	backgroundRenderWg sync.WaitGroup
 	stopCompleted      chan struct{}
@@ -168,6 +169,8 @@ func (r *Rasterizer) Run() error {
 	if r.Document == nil {
 		return errors.New("Unable to open document: " + r.Filename + "!")
 	}
+
+	r.docPageCount = int(C.fz_count_pages(r.Ctx, r.Document))
 
 	go r.mainEventLoop()
 
@@ -320,9 +323,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		return
 	}
 
-	pageCount := int(C.fz_count_pages(r.Ctx, r.Document))
-
-	if req.PageNumber > pageCount {
+	if req.PageNumber > r.docPageCount {
 		// Try to reply but don't block if something happened to the reply channel
 		select {
 		case req.ReplyChan <- &RasterReply{Error: ErrBadPage}:
@@ -347,7 +348,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// If we haven't already scaled this thing, and the request doesn't specify
 	// then let's scale it for the whole doc.
 	if r.scaleFactor == 0 && req.Width == 0 && req.Scale == 0 {
-		r.calculateScaleForDocument(pageCount)
+		r.calculateScaleForDocument(r.docPageCount)
 	} else {
 		// Do the logic to figure out how we scale this thing.
 		r.scaleFactor = r.scalePage(page, bounds, req)
