@@ -5,6 +5,7 @@ package lazypdf
 import (
 	"errors"
 	"image"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -71,15 +72,16 @@ type RasterReply struct {
 //  * You need to stop the event loop to remove the Goroutine and to free up
 //    any resources that have been allocated in the Run() function.
 type Rasterizer struct {
-	Filename      string
-	RequestChan   chan *RasterRequest
-	Ctx           *C.struct_fz_context_s
-	Document      *C.struct_fz_document_s
-	hasRun        bool
-	locks         *C.fz_locks_context
-	scaleFactor   float64
-	quitChan      chan struct{}
-	stopCompleted chan struct{}
+	Filename           string
+	RequestChan        chan *RasterRequest
+	Ctx                *C.struct_fz_context_s
+	Document           *C.struct_fz_document_s
+	hasRun             bool
+	locks              *C.fz_locks_context
+	scaleFactor        float64
+	quitChan           chan struct{}
+	backgroundRenderWg sync.WaitGroup
+	stopCompleted      chan struct{}
 }
 
 func NewRasterizer(filename string) *Rasterizer {
@@ -98,6 +100,11 @@ func (r *Rasterizer) GeneratePage(pageNumber int, width int, scale float64) (ima
 		return nil, errors.New("Rasterizer has not been started!")
 	}
 
+	if r.quitChan == nil {
+		return nil, errors.New("Rasterizer has been stopped!")
+	}
+
+	// Sanity check
 	if r.Ctx == nil || r.Document == nil {
 		return nil, errors.New("Rasterizer has been cleaned up! Cannot re-use")
 	}
@@ -193,6 +200,8 @@ OUTER:
 // finalCleanup is called the event loop has shut down and takes care of the
 // cleanup of the document, channels, etc.
 func (r *Rasterizer) finalCleanUp() {
+	// Wait for every backgroundRender operation to complete
+	r.backgroundRenderWg.Wait()
 
 	// Some final resource cleanup in C memory space
 	if r.Document != nil {
@@ -301,7 +310,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	bounds := new(C.fz_rect)
 	bbox := new(C.fz_irect)
 
-	if r.Ctx == nil || r.Document == nil {
+	if r.quitChan == nil || r.Ctx == nil || r.Document == nil {
 		select {
 		case req.ReplyChan <- &RasterReply{
 			Error: errors.New("Tried to process a page from a closed document: " + r.Filename),
@@ -327,10 +336,13 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		return
 	}
 
-	// Load the page and allocate C structure, freed later
-	page := C.fz_load_page(r.Ctx, r.Document, C.int(req.PageNumber-1))
+	// Create a clone of for objects that need to be released in backgroundRender
+	ctx := C.fz_clone_context(r.Ctx)
 
-	C.fz_bound_page(r.Ctx, page, bounds)
+	// Load the page and allocate C structure, freed later
+	page := C.fz_load_page(ctx, r.Document, C.int(req.PageNumber-1))
+
+	C.fz_bound_page(ctx, page, bounds)
 
 	// If we haven't already scaled this thing, and the request doesn't specify
 	// then let's scale it for the whole doc.
@@ -347,29 +359,29 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	C.fz_transform_rect(bounds, &matrix)
 	C.fz_round_rect(bbox, bounds)
 
-	// Freed in backgroundRender when we're done with it
-	list := C.fz_new_display_list(r.Ctx, bounds)
+	// Free list in backgroundRender when we're done with it
+	list := C.fz_new_display_list(ctx, bounds)
 
-	device := C.fz_new_list_device(r.Ctx, list)
+	device := C.fz_new_list_device(ctx, list)
 
-	C.fz_run_page(r.Ctx, page, device, &C.fz_identity, nil)
-	C.fz_close_device(r.Ctx, device)
-	C.fz_drop_device(r.Ctx, device)
-	C.fz_drop_page(r.Ctx, page)
+	C.fz_run_page(ctx, page, device, &C.fz_identity, nil)
+	C.fz_close_device(ctx, device)
+	C.fz_drop_device(ctx, device)
+	C.fz_drop_page(ctx, page)
 
 	bytes := make([]byte, 4*bbox.x1*bbox.y1)
 	// We take the Go buffer we made and pass a pointer into the C lib.
 	// This lets Go manage the buffer lifecycle. Bytes are written
 	// back-to-back as RGBA starting at x,y,a 0,0,? .
-	// We'll free this C structure in a defer block later
+	// We'll free this C structure in a defer block in backgroundRender
 	pixmap := C.fz_new_pixmap_with_bbox_and_data(
-		r.Ctx, C.fz_device_rgb(r.Ctx), bbox, nil, 1, (*C.uchar)(unsafe.Pointer(&bytes[0])),
+		ctx, C.fz_device_rgb(ctx), bbox, nil, 1, (*C.uchar)(unsafe.Pointer(&bytes[0])),
 	)
-	C.fz_clear_pixmap_with_value(r.Ctx, pixmap, C.int(0xff))
+	C.fz_clear_pixmap_with_value(ctx, pixmap, C.int(0xff))
 
 	// The rest we can background and let the main loop return to processing
 	// any additional pages that have been requested!
-	ctx := C.fz_clone_context(r.Ctx)
+	r.backgroundRenderWg.Add(1)
 	go r.backgroundRender(ctx, pixmap, list, bounds, bbox, matrix, r.scaleFactor, bytes, req)
 }
 
@@ -392,6 +404,9 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 
 		// Free the cloned context
 		C.fz_drop_context(ctx)
+
+		// Allow finalCleanUp to run
+		r.backgroundRenderWg.Done()
 	}()
 
 	// Set up the draw device from the cloned context

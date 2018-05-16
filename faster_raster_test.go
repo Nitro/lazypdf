@@ -183,8 +183,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 1024, 0)
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 			raster.Stop()
 		})
 
@@ -196,8 +196,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 1024, 0)
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 1024)
 			raster.Stop()
@@ -211,8 +211,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 0, 1.1)
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 655)
 			raster.Stop()
@@ -226,8 +226,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 1024, 1.1) // Specify BOTH
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 1024) // Should match -> width <-
 			raster.Stop()
@@ -242,8 +242,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 0, 0) // Specify NEITHER scale nor width
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 893) // Portrait file, should be 1.5 scaling
 			raster.Stop()
