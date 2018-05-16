@@ -1,4 +1,4 @@
 *.swp
 *.swo
-/mupdf-*
+/mupdf*
 render_tool/render_tool
