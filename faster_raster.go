@@ -211,7 +211,7 @@ func (r *Rasterizer) finalCleanUp() {
 		r.RequestChan = nil
 	}
 
-	C.free_locks(r.locks)
+	C.free_locks(&r.locks)
 
 	// Used by tests that need to know when this is fully complete.
 	// stopCompleted is not normally allocated so it will be nil.
