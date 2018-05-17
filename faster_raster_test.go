@@ -188,6 +188,45 @@ func Test_Processing(t *testing.T) {
 			raster.Stop()
 		})
 
+		Convey("returns an image and doesn't hang when stopping before the async render is complete", func() {
+			if testing.Short() {
+				return
+			}
+
+			raster.Run()
+
+			// We have to give the background goroutine a little time to start :(
+			time.Sleep(5 * time.Millisecond)
+
+			replyChan := make(chan *RasterReply, 1)
+
+			// Pass the request to the rendering function via the channel
+			raster.RequestChan <- &RasterRequest{
+				PageNumber: 2,
+				Width:      1024,
+				Scale:      0,
+				ReplyChan:  replyChan,
+			}
+
+			raster.stopCompleted = make(chan struct{}) // Get notified when it's all stopped
+			go raster.Stop()
+			<-raster.stopCompleted
+
+			// Wait for a reply or a timeout, whichever occurs first
+			timeoutOccured := false
+			var response *RasterReply
+			select {
+			case response = <-replyChan:
+				close(replyChan)
+				replyChan = nil
+			case <-time.After(RasterTimeout):
+				timeoutOccured = true
+			}
+			So(timeoutOccured, ShouldBeFalse)
+			So(response.Error, ShouldBeNil)
+			So(response.Image, ShouldNotBeNil)
+		})
+
 		Convey("returns an image with the correct width when specified", func() {
 			if testing.Short() {
 				return
