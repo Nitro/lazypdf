@@ -327,7 +327,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		// Try to reply but don't block if something happened to the reply channel
 		select {
 		case req.ReplyChan <- &RasterReply{Error: ErrBadPage}:
-			// Nothing
+			log.Warnf("Requested page %d is greater than the document page count %d", req.PageNumber, r.docPageCount)
 		default:
 			log.Warnf(
 				"Failed to reply for %s page %d, with bad page error",

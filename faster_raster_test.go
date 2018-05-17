@@ -157,7 +157,6 @@ func Test_Processing(t *testing.T) {
 		raster := NewRasterizer("fixtures/sample.pdf")
 
 		Convey("returns an error when the rasterizer has not started", func() {
-			raster.hasRun = false
 			_, err := raster.GeneratePage(1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
@@ -167,6 +166,7 @@ func Test_Processing(t *testing.T) {
 		Convey("returns an error on page out of bounds", func() {
 			err := raster.Run()
 			So(err, ShouldBeNil)
+			So(raster.docPageCount, ShouldEqual, 2)
 
 			img, err := raster.GeneratePage(3, 1024, 0)
 
@@ -180,11 +180,40 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
+
 			img, err := raster.GeneratePage(2, 1024, 0)
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
+			raster.Stop()
+		})
+
+		Convey("returns an error when the rasterizer has been stopped", func() {
+			raster.Run()
+
+			// We have to give the background goroutine a little time to start :(
+			time.Sleep(5 * time.Millisecond)
+
+			raster.stopCompleted = make(chan struct{})
+			go raster.Stop()
+			<-raster.stopCompleted
+
+			_, err := raster.GeneratePage(1, 1024, 0)
+
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "has been stopped")
+		})
+
+		Convey("returns an error when the rasterizer is started twice", func() {
+			err := raster.Run()
+			So(err, ShouldBeNil)
+
+			err = raster.Run()
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "has already been run and cannot be recycled")
+
 			raster.Stop()
 		})
 
@@ -208,7 +237,7 @@ func Test_Processing(t *testing.T) {
 				ReplyChan:  replyChan,
 			}
 
-			raster.stopCompleted = make(chan struct{}) // Get notified when it's all stopped
+			raster.stopCompleted = make(chan struct{})
 			go raster.Stop()
 			<-raster.stopCompleted
 
