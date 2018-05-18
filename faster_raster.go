@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// #cgo CFLAGS: -I. -I./mupdf/include -I./mupdf/include/mupdf -I./mupdf/thirdparty/openjpeg -I./mupdf/thirdparty/jbig2dec -I./mupdf/thirdparty/zlib -I./mupdf/thirdparty/jpeg -I./mupdf/thirdparty/freetype -g
+// #cgo CFLAGS: -I. -I./mupdf/include -I./mupdf/include/mupdf -I./mupdf/thirdparty/openjpeg -I./mupdf/thirdparty/jbig2dec -I./mupdf/thirdparty/zlib -I./mupdf/thirdparty/jpeg -I./mupdf/thirdparty/freetype
 // #cgo LDFLAGS: -L./mupdf/build/release -lmupdf -lmupdfthird -lm -ljbig2dec -lz -lfreetype -ljpeg -lcrypto -lpthread
 // #include <faster_raster.h>
 import "C"
