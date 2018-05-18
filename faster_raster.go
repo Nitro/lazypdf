@@ -33,8 +33,6 @@ var (
 	ErrBadPage = errors.New("invalid page number")
 	// We tried to rasterize the page, but we gave up waiting.
 	ErrRasterTimeout = errors.New("rasterizer timed out!")
-	// MuPDF failed to clone the context
-	ErrCloneCtx = errors.New("failed to clone context")
 
 	defaultExtension = C.CString(".pdf")
 )
@@ -342,7 +340,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// Create a clone of r.Ctx for objects that are allocated for rendering the current page
 	ctx := C.fz_clone_context(r.Ctx)
 	if ctx == nil {
-		req.ReplyChan <- &RasterReply{Error: ErrCloneCtx}
+		req.ReplyChan <- &RasterReply{Error: errors.New("failed to clone context")}
 	}
 
 	// Load the page and allocate C structure, freed later

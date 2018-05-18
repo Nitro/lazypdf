@@ -329,10 +329,6 @@ func Test_Processing(t *testing.T) {
 		})
 
 		Convey("counts the number of pages in the document when raster starts", func() {
-			if testing.Short() {
-				return
-			}
-
 			raster.Run()
 
 			So(raster.docPageCount, ShouldEqual, 2)
