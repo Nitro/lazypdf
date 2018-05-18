@@ -157,7 +157,6 @@ func Test_Processing(t *testing.T) {
 		raster := NewRasterizer("fixtures/sample.pdf")
 
 		Convey("returns an error when the rasterizer has not started", func() {
-			raster.hasRun = false
 			_, err := raster.GeneratePage(1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
@@ -167,6 +166,7 @@ func Test_Processing(t *testing.T) {
 		Convey("returns an error on page out of bounds", func() {
 			err := raster.Run()
 			So(err, ShouldBeNil)
+			So(raster.docPageCount, ShouldEqual, 2)
 
 			img, err := raster.GeneratePage(3, 1024, 0)
 
@@ -180,12 +180,80 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
+
 			img, err := raster.GeneratePage(2, 1024, 0)
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 			raster.Stop()
+		})
+
+		Convey("returns an error when the rasterizer has been stopped", func() {
+			raster.Run()
+
+			// We have to give the background goroutine a little time to start :(
+			time.Sleep(5 * time.Millisecond)
+
+			raster.stopCompleted = make(chan struct{})
+			go raster.Stop()
+			<-raster.stopCompleted
+
+			_, err := raster.GeneratePage(1, 1024, 0)
+
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "has been stopped")
+		})
+
+		Convey("returns an error when the rasterizer is started twice", func() {
+			err := raster.Run()
+			So(err, ShouldBeNil)
+
+			err = raster.Run()
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "has already been run and cannot be recycled")
+
+			raster.Stop()
+		})
+
+		Convey("returns an image and doesn't hang when stopping before the async render is complete", func() {
+			if testing.Short() {
+				return
+			}
+
+			raster.Run()
+
+			// We have to give the background goroutine a little time to start :(
+			time.Sleep(5 * time.Millisecond)
+
+			replyChan := make(chan *RasterReply, 1)
+
+			// Pass the request to the rendering function via the channel
+			raster.RequestChan <- &RasterRequest{
+				PageNumber: 2,
+				Width:      1024,
+				Scale:      0,
+				ReplyChan:  replyChan,
+			}
+
+			raster.stopCompleted = make(chan struct{})
+			go raster.Stop()
+			<-raster.stopCompleted
+
+			// Wait for a reply or a timeout, whichever occurs first
+			timeoutOccured := false
+			var response *RasterReply
+			select {
+			case response = <-replyChan:
+				close(replyChan)
+				replyChan = nil
+			case <-time.After(RasterTimeout):
+				timeoutOccured = true
+			}
+			So(timeoutOccured, ShouldBeFalse)
+			So(response.Error, ShouldBeNil)
+			So(response.Image, ShouldNotBeNil)
 		})
 
 		Convey("returns an image with the correct width when specified", func() {
@@ -196,8 +264,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 1024, 0)
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 1024)
 			raster.Stop()
@@ -211,8 +279,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 0, 1.1)
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 655)
 			raster.Stop()
@@ -226,8 +294,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 1024, 1.1) // Specify BOTH
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 1024) // Should match -> width <-
 			raster.Stop()
@@ -242,8 +310,8 @@ func Test_Processing(t *testing.T) {
 			raster.Run()
 			img, err := raster.GeneratePage(2, 0, 0) // Specify NEITHER scale nor width
 
-			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
+			So(img, ShouldNotBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 893) // Portrait file, should be 1.5 scaling
 			raster.Stop()
@@ -257,6 +325,14 @@ func Test_Processing(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			So(img.Bounds().Max.X, ShouldEqual, 842) // Landscape file, should be 1.0 scaling
+			raster.Stop()
+		})
+
+		Convey("counts the number of pages in the document when raster starts", func() {
+			raster.Run()
+
+			So(raster.docPageCount, ShouldEqual, 2)
+
 			raster.Stop()
 		})
 
