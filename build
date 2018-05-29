@@ -12,7 +12,7 @@ fi
 echo "Building muPDF..."
 cd mupdf
 
-make -j8 libs
+XCFLAGS="-g" make -j8 libs
 
 # Newer OSX needs an include path for OpenSSL
 if [[ `uname -s` == "Darwin" ]]; then
