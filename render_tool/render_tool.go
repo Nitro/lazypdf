@@ -26,7 +26,10 @@ func main() {
 	}
 
 	raster := lazypdf.NewRasterizer(*pdf)
-	raster.Run()
+	err := raster.Run()
+	if err != nil {
+		log.Fatalf("Failed to initialize the renderer: %s", err)
+	}
 
 	img, err := raster.GeneratePage(*page, *size, *scale)
 	if err != nil {
