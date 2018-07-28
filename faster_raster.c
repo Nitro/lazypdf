@@ -192,3 +192,63 @@ int get_rotation(fz_context * ctx, fz_page * page) {
 			  pdf_lookup_inherited_page_item(ctx, page_obj,
 							 PDF_NAME_Rotate));
 }
+
+fz_buffer *getSVG(fz_context *ctx, char *filename, int pageNum) {
+	int alphabits = 8;
+	float layout_w = 450;
+	float layout_h = 600;
+	float layout_em = 12;
+
+	fz_document *doc;
+	fz_document_writer *writer;
+
+	fz_rect mediabox;
+	fz_page *page;
+	fz_device *dev;
+
+	fz_set_aa_level(ctx, alphabits);
+
+	fz_try(ctx) {
+		writer = fz_new_svg_writer(ctx, NULL, NULL);
+	}
+	fz_catch(ctx) {
+		fprintf(stderr, "cannot create document: %s\n", fz_caught_message(ctx));
+		fz_drop_context(ctx);
+		return NULL;
+	}
+
+	fz_buffer *fzbuf = 	fz_new_buffer(ctx, 1024);
+	fz_output *out = fz_new_output_with_buffer(ctx, fzbuf);
+
+	doc = fz_open_document(ctx, filename);
+	fz_layout_document(ctx, doc, layout_w, layout_h, layout_em);
+
+	// Load and prepare the page for rendering
+	page = fz_load_page(ctx, doc, pageNum);
+	fz_bound_page(ctx, page, &mediabox); {
+		fz_svg_writer *wri = (fz_svg_writer *)writer;
+		wri->count += 1;
+
+		float w = mediabox.x1 - mediabox.x0;
+		float h = mediabox.y1 - mediabox.y0;
+
+		dev = fz_new_svg_device(ctx, out, w, h, wri->text_format, wri->reuse_images);
+	}
+
+	// Render and close the page
+	fz_run_page(ctx, page, dev, &fz_identity, NULL);
+	fz_end_page(ctx, writer);
+
+	// Clean up afterward
+	fz_drop_page(ctx, page);
+	fz_drop_document(ctx, doc);
+	fz_close_device(ctx, dev);
+	fz_close_document_writer(ctx, writer);
+	fz_drop_document_writer(ctx, writer);
+
+	return fzbuf;
+}
+
+void disposeSVG(fz_context *ctx, fz_buffer *buf) {
+	fz_drop_buffer(ctx, buf);
+}

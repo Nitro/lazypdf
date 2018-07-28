@@ -251,6 +251,16 @@ func (r *Rasterizer) getRotation(pageNum int) int {
 	return int(rotation)
 }
 
+func (r *Rasterizer) GetSVG(pageNum int) []byte {
+	cfilename := C.CString(r.Filename)
+	defer C.free(unsafe.Pointer(cfilename))
+
+	fzBuf := C.getSVG(r.Ctx, cfilename, C.int(pageNum-1))
+	defer C.disposeSVG(r.Ctx, fzBuf)
+
+	return C.GoBytes(unsafe.Pointer(fzBuf.data), C.int(fzBuf.len))
+}
+
 // scalePage figures out how we're going to scale the page when rasterizing. If
 // with width is set, we just do that. Otherwise if the scale is set we do that.
 // Next we check the bounding box to find lanscape pages and scale them less.
