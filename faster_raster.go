@@ -177,6 +177,11 @@ func (r *Rasterizer) Run() error {
 	return nil
 }
 
+// GetPageCount returns the number of pages in the document
+func (r *Rasterizer) GetPageCount() int {
+	return r.docPageCount
+}
+
 // This is the main event loop for the rasterizer actor. It handles processing all
 // three channels and makes sure we don't have any concurrency issues on the shared
 // resources.
