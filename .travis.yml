@@ -6,7 +6,7 @@ go:
 sudo: required
 
 before_install:
-  - sudo apt-get install -y libjpeg62 zlib1g libjbig2dec0 libjbig2dec0-dev libfreetype6 libpng12-0 ca-certificates
+  - sudo apt-get install -y ca-certificates
   - ./build
 
 script:
