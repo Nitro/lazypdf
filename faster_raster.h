@@ -24,3 +24,4 @@ void unlock_mutex(void *locks, int lock_no);
 fz_locks_context *new_locks();
 void free_locks(fz_locks_context ** locks);
 int get_rotation(fz_context *ctx, fz_page *page);
+fz_page *load_page(fz_context *ctx, fz_document *doc, int number);
