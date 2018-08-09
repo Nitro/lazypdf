@@ -1,24 +1,27 @@
 #!/bin/bash -e
 
+if [ ! -z ${SHALLOW_CLONE} ]; then
+	# Can't use --shallow-submodules because some bug in either Git or in the
+	# mupdf submodule setup makes the clone command fail.
+	SHALLOW_CLONE="--depth 1 --no-shallow-submodules"
+fi
+
 MUPDF_VERSION="1.13.0"
 
 if [[ ! -d mupdf ]]; then
 	echo "Downloading muPDF..."
-	git clone https://github.com/ArtifexSoftware/mupdf.git
-	( cd mupdf && git checkout -q ${MUPDF_VERSION} )
-	( cd mupdf/thirdparty && git submodule init && git submodule update --recursive )
+	# Setting -j0 clones submodules with as many parallel jobs as possible
+	git clone --branch ${MUPDF_VERSION} ${SHALLOW_CLONE} --recurse-submodules=thirdparty -j0 https://github.com/ArtifexSoftware/mupdf.git
 fi
 
 echo "Building muPDF..."
-cd mupdf
-
-XCFLAGS="-g" make -j8 libs
+# Pass -j to build using as many cores as possible
+(cd mupdf; XCFLAGS="-g" make -j libs)
 
 # Newer OSX needs an include path for OpenSSL
 if [[ `uname -s` == "Darwin" ]]; then
 	export CGO_LDFLAGS="-L/usr/local/opt/openssl/lib"
 fi
 
-echo "Building Go application..."
-cd -
+echo "Fetching Go dependencies and compiling code..."
 go get ./...
