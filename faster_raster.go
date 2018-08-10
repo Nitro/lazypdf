@@ -248,12 +248,15 @@ func (r *Rasterizer) Stop() {
 
 // getRotation is used by tests to test the C rotation functions since you can't
 // call Cgo directly from tests.
-func (r *Rasterizer) getRotation(pageNum int) int {
-	page := C.fz_load_page(r.Ctx, r.Document, C.int(pageNum-1))
+func (r *Rasterizer) getRotation(pageNum int) (int, error) {
+	page := C.load_page(r.Ctx, r.Document, C.int(pageNum-1))
+	if page == nil {
+		return 0, ErrBadPage
+	}
 	defer C.fz_drop_page(r.Ctx, page)
 
 	rotation := C.get_rotation(r.Ctx, page)
-	return int(rotation)
+	return int(rotation), nil
 }
 
 // scalePage figures out how we're going to scale the page when rasterizing. If
@@ -298,7 +301,11 @@ func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
 
 	var page *C.fz_page
 	for i := 0; i < pageCount; i++ {
-		page = C.fz_load_page(r.Ctx, r.Document, C.int(i))
+		page = C.load_page(r.Ctx, r.Document, C.int(i))
+		if page == nil {
+			continue
+		}
+
 		C.fz_bound_page(r.Ctx, page, bounds)
 		r.scaleFactor = r.scalePage(page, bounds, nil)
 		C.fz_drop_page(r.Ctx, page)
@@ -328,11 +335,11 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		return
 	}
 
-	if req.PageNumber > r.docPageCount {
+	if req.PageNumber < 1 || req.PageNumber > r.docPageCount {
 		// Try to reply but don't block if something happened to the reply channel
 		select {
 		case req.ReplyChan <- &RasterReply{Error: ErrBadPage}:
-			log.Warnf("Requested page %d is greater than the document page count %d", req.PageNumber, r.docPageCount)
+			log.Warnf("Requested invalid page %d out of total document page count %d", req.PageNumber, r.docPageCount)
 		default:
 			log.Warnf(
 				"Failed to reply for %s page %d, with bad page error",
@@ -349,7 +356,10 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	}
 
 	// Load the page and allocate C structure, freed later
-	page := C.fz_load_page(ctx, r.Document, C.int(req.PageNumber-1))
+	page := C.load_page(ctx, r.Document, C.int(req.PageNumber-1))
+	if page == nil {
+		req.ReplyChan <- &RasterReply{Error: ErrBadPage}
+	}
 
 	C.fz_bound_page(ctx, page, bounds)
 

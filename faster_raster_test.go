@@ -56,8 +56,16 @@ func Test_getRotation(t *testing.T) {
 		raster := NewRasterizer("fixtures/rotated-sample.pdf")
 		raster.Run()
 
-		So(raster.getRotation(1), ShouldEqual, 180)
-		So(raster.getRotation(2), ShouldEqual, 0)
+		rot, err := raster.getRotation(0)
+		So(err, ShouldEqual, ErrBadPage)
+
+		rot, err = raster.getRotation(1)
+		So(err, ShouldBeNil)
+		So(rot, ShouldEqual, 180)
+
+		rot, err = raster.getRotation(2)
+		So(err, ShouldBeNil)
+		So(rot, ShouldEqual, 0)
 
 		raster.Stop()
 	})
@@ -172,6 +180,11 @@ func Test_Processing(t *testing.T) {
 
 			So(img, ShouldBeNil)
 			So(err, ShouldEqual, ErrBadPage)
+
+			img, err = raster.GeneratePage(0, 1024, 0)
+			So(img, ShouldBeNil)
+			So(err, ShouldEqual, ErrBadPage)
+
 			raster.Stop()
 		})
 
