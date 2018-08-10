@@ -7,7 +7,7 @@ sudo: required
 
 before_install:
   - sudo apt-get install -y ca-certificates
-  - ./build
+  - SHALLOW_CLONE=true ./build
 
 script:
   - go test -v -race --timeout 1m
