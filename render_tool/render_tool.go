@@ -31,7 +31,7 @@ func main() {
 		log.Fatalf("Failed to initialize the renderer: %s", err)
 	}
 
-	img, err := raster.GeneratePage(*page, *size, *scale)
+	img, err := raster.GeneratePageImage(*page, *size, *scale)
 	if err != nil {
 		log.Fatalf("Render error: %s", err)
 	}
