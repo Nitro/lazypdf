@@ -360,44 +360,26 @@ func Test_Processing(t *testing.T) {
 			var err1, err2, err3, err4 error
 			var img1, img2, img3, img4 image.Image
 
-			// These are used in the goroutines instead of checking imgX individually
-			// as ShouldNotBeNil, because something about the copying in the test
-			// framework seems to make that take about 1 second each! Doing it this
-			// way shaves about 3 seconds off the tests.
-			var ok1, ok2, ok3, ok4 bool
-
 			var wg sync.WaitGroup
 			wg.Add(8)
 
 			go func() {
 				img1, err1 = raster.GeneratePageImage(1, 1024, 0)
-				if img1 != nil {
-					ok1 = true
-				}
 				wg.Done()
 			}()
 
 			go func() {
 				img2, err2 = raster.GeneratePageImage(1, 1024, 0)
-				if img2 != nil {
-					ok2 = true
-				}
 				wg.Done()
 			}()
 
 			go func() {
 				img3, err3 = raster.GeneratePageImage(2, 1024, 0)
-				if img3 != nil {
-					ok3 = true
-				}
 				wg.Done()
 			}()
 
 			go func() {
 				img4, err4 = raster.GeneratePageImage(2, 1024, 0)
-				if img4 != nil {
-					ok4 = true
-				}
 				wg.Done()
 			}()
 
@@ -412,16 +394,16 @@ func Test_Processing(t *testing.T) {
 
 			wg.Wait()
 
-			// Checking these is really slow... about 1 second each
-			So(ok1, ShouldBeTrue)
-			So(ok2, ShouldBeTrue)
-			So(ok3, ShouldBeTrue)
-			So(ok4, ShouldBeTrue)
-
 			So(err1, ShouldBeNil)
 			So(err2, ShouldBeNil)
 			So(err3, ShouldBeNil)
 			So(err4, ShouldBeNil)
+
+			// Checking these using ShouldNotBeNil is really slow...
+			So(img1 != nil, ShouldBeTrue)
+			So(img2 != nil, ShouldBeTrue)
+			So(img3 != nil, ShouldBeTrue)
+			So(img4 != nil, ShouldBeTrue)
 
 			raster.Stop()
 		})
