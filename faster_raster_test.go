@@ -203,6 +203,23 @@ func Test_Processing(t *testing.T) {
 			raster.Stop()
 		})
 
+		Convey("returns an SVG and no error when things go well", func() {
+			if testing.Short() {
+				return
+			}
+
+			err := raster.Run()
+			So(err, ShouldBeNil)
+
+			svg, err := raster.GeneratePageSVG(2, 1024, 0)
+
+			So(err, ShouldBeNil)
+			So(svg, ShouldStartWith, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>`)
+			So(svg, ShouldContainSubstring, "</clipPath>")
+			So(svg, ShouldEndWith, "</svg>\n")
+			raster.Stop()
+		})
+
 		Convey("returns an error when the rasterizer has been stopped", func() {
 			raster.Run()
 
@@ -404,6 +421,42 @@ func Test_Processing(t *testing.T) {
 			So(img2 != nil, ShouldBeTrue)
 			So(img3 != nil, ShouldBeTrue)
 			So(img4 != nil, ShouldBeTrue)
+
+			raster.Stop()
+		})
+
+		Convey("handles both image and SVG rasterisation simultaneously", func() {
+			if testing.Short() {
+				return
+			}
+
+			raster.Run()
+
+			var err1, err2 error
+			var img image.Image
+			var svg string
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			go func() {
+				img, err1 = raster.GeneratePageImage(1, 1024, 0)
+				wg.Done()
+			}()
+
+			go func() {
+				svg, err2 = raster.GeneratePageSVG(1, 1024, 0)
+				wg.Done()
+			}()
+
+			wg.Wait()
+
+			So(err1, ShouldBeNil)
+			So(err2, ShouldBeNil)
+
+			// Checking img using ShouldNotBeNil is really slow...
+			So(img != nil, ShouldBeTrue)
+			So(svg, ShouldNotBeBlank)
 
 			raster.Stop()
 		})
