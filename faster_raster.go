@@ -441,6 +441,13 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	C.fz_transform_rect(bounds, &matrix)
 	C.fz_round_rect(bbox, bounds)
 
+	// Bail out early when rendering to SVG
+	if req.RasterType == RasterSVG {
+		// ctx and page will be disposed inside this method
+		r.renderToSVG(ctx, page, bounds, req)
+		return
+	}
+
 	// Free list in backgroundRender when we're done with it
 	list := C.fz_new_display_list(ctx, bounds)
 
@@ -467,6 +474,49 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// any additional pages that have been requested!
 	r.backgroundRenderWg.Add(1)
 	go r.backgroundRender(ctx, pixmap, list, bounds, bbox, matrix, r.scaleFactor, bytes, req)
+}
+
+// renderToSVG renders the requested page to an SVG string
+// TODO: Check if we can do some of this processing async
+func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bounds *C.struct_fz_rect_s, req *RasterRequest) {
+	// Clean up earlier allocated C data structures when we've completed this
+	defer func() {
+		C.fz_drop_page(ctx, page)
+
+		// Free the cloned context
+		C.fz_drop_context(ctx)
+	}()
+
+	// TODO: Optimise the initial size of the buffer. For example,
+	// use 1024 as the initial value and cache the actual value if bigger.
+	// Once a new page is requested, pass the cached value to fz_new_buffer.
+	buf := C.fz_new_buffer(ctx, 1024)
+	defer C.fz_drop_buffer(ctx, buf)
+
+	out := C.fz_new_output_with_buffer(ctx, buf)
+	defer C.fz_drop_output(ctx, out)
+
+	// Use the default values for text_format and reuse_images from fz_new_svg_writer
+	device := C.fz_new_svg_device(ctx, out, bounds.x1-bounds.x0, bounds.y1-bounds.y0, C.FZ_SVG_TEXT_AS_PATH, 1)
+
+	// TODO: Pass in a cookie instead of nil, so we can cancel the operation if
+	// it takes too long.
+	C.fz_run_page(ctx, page, device, &C.fz_identity, nil)
+
+	// Signal the end of input and flush any buffered output.
+	// See comment above fz_close_device
+	C.fz_close_device(ctx, device)
+	C.fz_drop_device(ctx, device)
+
+	svgData := C.GoString(C.fz_string_from_buffer(ctx, buf))
+
+	// Try to reply, but don't get stuck if something happened to the channel
+	select {
+	case req.ReplyChan <- &RasterSVGReply{Data: svgData}:
+		//nothing
+	default:
+		log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
+	}
 }
 
 // backgroundRender handles the portion of the rasterization that can be done
