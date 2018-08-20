@@ -354,7 +354,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	if ctx == nil {
 		select {
 		case req.ReplyChan <- &RasterReply{Error: errors.New("failed to clone context")}:
-			log.Warnln("Failed to clone context!")
+			// nothing
 		default:
 			log.Warnf(
 				"Failed to reply for %s page %d, with clone context error",
