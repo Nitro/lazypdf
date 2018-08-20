@@ -81,7 +81,7 @@ func main() {
 		}
 
 		outputWriter(func(f *os.File) {
-			_, err = f.WriteString(svgData)
+			_, err = f.Write(svgData)
 			if err != nil {
 				log.Fatalf("Failed to write SVG to file: %s", err)
 			}

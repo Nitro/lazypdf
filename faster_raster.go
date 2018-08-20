@@ -81,7 +81,7 @@ type RasterImageReply struct {
 
 type RasterSVGReply struct {
 	RasterReply
-	Data string
+	SVG []byte
 }
 
 // Rasterizer is an actor that runs on an event loop processing a request channel.
@@ -177,13 +177,13 @@ func (r *Rasterizer) GeneratePageImage(pageNumber int, width int, scale float64)
 	return response.(*RasterImageReply).Image, nil
 }
 
-func (r *Rasterizer) GeneratePageSVG(pageNumber int, width int, scale float64) (string, error) {
+func (r *Rasterizer) GeneratePageSVG(pageNumber int, width int, scale float64) ([]byte, error) {
 	response, err := r.generatePage(pageNumber, width, scale, RasterSVG)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return response.(*RasterSVGReply).Data, nil
+	return response.(*RasterSVGReply).SVG, nil
 }
 
 // Run starts the main even loop after allocating some resources. This needs to be
@@ -508,11 +508,24 @@ func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bo
 	C.fz_close_device(ctx, device)
 	C.fz_drop_device(ctx, device)
 
-	svgData := C.GoString(C.fz_string_from_buffer(ctx, buf))
+	// Fetch the SVG as a byte array instead of string (by calling fz_string_from_buffer),
+	// so we won't have to convert it to a byte array later when passing it to a io.Writer.
+	var bufferContents *C.uchar
+	length := C.fz_buffer_storage(ctx, buf, &bufferContents)
+	if length == 0 {
+		select {
+		case req.ReplyChan <- &RasterReply{err: errors.New("failed to fetch the SVG data")}:
+			// nothing
+		default:
+			log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
+		}
+		return
+	}
+	svgBytes := C.GoBytes(unsafe.Pointer(bufferContents), C.int(length))
 
 	// Try to reply, but don't get stuck if something happened to the channel
 	select {
-	case req.ReplyChan <- &RasterSVGReply{Data: svgData}:
+	case req.ReplyChan <- &RasterSVGReply{SVG: svgBytes}:
 		//nothing
 	default:
 		log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)

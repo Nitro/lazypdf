@@ -214,9 +214,9 @@ func Test_Processing(t *testing.T) {
 			svg, err := raster.GeneratePageSVG(2, 1024, 0)
 
 			So(err, ShouldBeNil)
-			So(svg, ShouldStartWith, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>`)
-			So(svg, ShouldContainSubstring, "</clipPath>")
-			So(svg, ShouldEndWith, "</svg>\n")
+			So(string(svg), ShouldStartWith, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>`)
+			So(string(svg), ShouldContainSubstring, "</clipPath>")
+			So(string(svg), ShouldEndWith, "</svg>\n")
 			raster.Stop()
 		})
 
@@ -434,7 +434,7 @@ func Test_Processing(t *testing.T) {
 
 			var err1, err2 error
 			var img image.Image
-			var svg string
+			var svg []byte
 
 			var wg sync.WaitGroup
 			wg.Add(2)
@@ -456,7 +456,7 @@ func Test_Processing(t *testing.T) {
 
 			// Checking img using ShouldNotBeNil is really slow...
 			So(img != nil, ShouldBeTrue)
-			So(svg, ShouldNotBeBlank)
+			So(svg, ShouldNotBeNil)
 
 			raster.Stop()
 		})
