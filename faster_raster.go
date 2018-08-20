@@ -352,7 +352,16 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// Create a clone of r.Ctx for objects that are allocated for rendering the current page
 	ctx := C.fz_clone_context(r.Ctx)
 	if ctx == nil {
-		req.ReplyChan <- &RasterReply{Error: errors.New("failed to clone context")}
+		select {
+		case req.ReplyChan <- &RasterReply{Error: errors.New("failed to clone context")}:
+			log.Warnln("Failed to clone context!")
+		default:
+			log.Warnf(
+				"Failed to reply for %s page %d, with clone context error",
+				r.Filename, req.PageNumber,
+			)
+		}
+		return
 	}
 
 	// Load the page and allocate C structure, freed later
