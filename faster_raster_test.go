@@ -78,7 +78,7 @@ func Test_scalePage(t *testing.T) {
 				raster := NewRasterizer("fixtures/landscape-sample.pdf")
 				raster.Run()
 
-				img, err := raster.GeneratePage(1, 0, 0)
+				img, err := raster.GeneratePageImage(1, 0, 0)
 
 				So(err, ShouldBeNil)
 				So(img.Bounds().Max.X, ShouldEqual, 842)
@@ -89,7 +89,7 @@ func Test_scalePage(t *testing.T) {
 			Convey("as PortraitScale when pages were rotated", func() {
 				raster := NewRasterizer("fixtures/rotated-sample.pdf")
 				raster.Run()
-				img, err := raster.GeneratePage(1, 0, 0)
+				img, err := raster.GeneratePageImage(1, 0, 0)
 
 				So(err, ShouldBeNil)
 				So(img.Bounds().Max.X, ShouldEqual, 842)
@@ -101,7 +101,7 @@ func Test_scalePage(t *testing.T) {
 		Convey("handles portrait pages as PortraitScale", func() {
 			raster := NewRasterizer("fixtures/sample.pdf")
 			raster.Run()
-			img, err := raster.GeneratePage(1, 0, 0)
+			img, err := raster.GeneratePageImage(1, 0, 0)
 
 			So(err, ShouldBeNil)
 			So(img.Bounds().Max.X, ShouldEqual, 893)
@@ -112,7 +112,7 @@ func Test_scalePage(t *testing.T) {
 		Convey("uses LandscapeScale if any page is landscape", func() {
 			raster := NewRasterizer("fixtures/mixed-sample.pdf")
 			raster.Run()
-			img, err := raster.GeneratePage(2, 0, 0)
+			img, err := raster.GeneratePageImage(2, 0, 0)
 
 			So(err, ShouldBeNil)
 			So(img.Bounds().Max.X, ShouldEqual, 612)
@@ -123,7 +123,7 @@ func Test_scalePage(t *testing.T) {
 		Convey("uses specified scale if there is one", func() {
 			raster := NewRasterizer("fixtures/mixed-sample.pdf")
 			raster.Run()
-			img, err := raster.GeneratePage(2, 0, 0.5)
+			img, err := raster.GeneratePageImage(2, 0, 0.5)
 
 			So(err, ShouldBeNil)
 			So(img.Bounds().Max.X, ShouldEqual, 306)
@@ -139,7 +139,7 @@ func Test_WithoutFileExtensions(t *testing.T) {
 			raster := NewRasterizer("fixtures/sample_no_extension")
 			raster.Run()
 
-			_, err := raster.GeneratePage(1, 1024, 0)
+			_, err := raster.GeneratePageImage(1, 1024, 0)
 			So(err, ShouldBeNil)
 
 			raster.Stop()
@@ -151,7 +151,7 @@ func Test_WithoutFileExtensions(t *testing.T) {
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "Unable to open document")
 
-			_, err = raster.GeneratePage(1, 1024, 0)
+			_, err = raster.GeneratePageImage(1, 1024, 0)
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has been cleaned up")
 
@@ -165,7 +165,7 @@ func Test_Processing(t *testing.T) {
 		raster := NewRasterizer("fixtures/sample.pdf")
 
 		Convey("returns an error when the rasterizer has not started", func() {
-			_, err := raster.GeneratePage(1, 1024, 0)
+			_, err := raster.GeneratePageImage(1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has not been started")
@@ -176,12 +176,12 @@ func Test_Processing(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(raster.docPageCount, ShouldEqual, 2)
 
-			img, err := raster.GeneratePage(3, 1024, 0)
+			img, err := raster.GeneratePageImage(3, 1024, 0)
 
 			So(img, ShouldBeNil)
 			So(err, ShouldEqual, ErrBadPage)
 
-			img, err = raster.GeneratePage(0, 1024, 0)
+			img, err = raster.GeneratePageImage(0, 1024, 0)
 			So(img, ShouldBeNil)
 			So(err, ShouldEqual, ErrBadPage)
 
@@ -196,10 +196,27 @@ func Test_Processing(t *testing.T) {
 			err := raster.Run()
 			So(err, ShouldBeNil)
 
-			img, err := raster.GeneratePage(2, 1024, 0)
+			img, err := raster.GeneratePageImage(2, 1024, 0)
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
+			raster.Stop()
+		})
+
+		Convey("returns an SVG and no error when things go well", func() {
+			if testing.Short() {
+				return
+			}
+
+			err := raster.Run()
+			So(err, ShouldBeNil)
+
+			svg, err := raster.GeneratePageSVG(2, 1024, 0)
+
+			So(err, ShouldBeNil)
+			So(string(svg), ShouldStartWith, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>`)
+			So(string(svg), ShouldContainSubstring, "</clipPath>")
+			So(string(svg), ShouldEndWith, "</svg>\n")
 			raster.Stop()
 		})
 
@@ -213,7 +230,7 @@ func Test_Processing(t *testing.T) {
 			go raster.Stop()
 			<-raster.stopCompleted
 
-			_, err := raster.GeneratePage(1, 1024, 0)
+			_, err := raster.GeneratePageImage(1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has been stopped")
@@ -240,7 +257,7 @@ func Test_Processing(t *testing.T) {
 			// We have to give the background goroutine a little time to start :(
 			time.Sleep(5 * time.Millisecond)
 
-			replyChan := make(chan *RasterReply, 1)
+			replyChan := make(chan ReplyWrapper, 1)
 
 			// Pass the request to the rendering function via the channel
 			raster.RequestChan <- &RasterRequest{
@@ -256,7 +273,7 @@ func Test_Processing(t *testing.T) {
 
 			// Wait for a reply or a timeout, whichever occurs first
 			timeoutOccured := false
-			var response *RasterReply
+			var response ReplyWrapper
 			select {
 			case response = <-replyChan:
 				close(replyChan)
@@ -265,8 +282,9 @@ func Test_Processing(t *testing.T) {
 				timeoutOccured = true
 			}
 			So(timeoutOccured, ShouldBeFalse)
-			So(response.Error, ShouldBeNil)
-			So(response.Image, ShouldNotBeNil)
+			So(response, ShouldNotBeNil)
+			So(response.Error(), ShouldBeNil)
+			So(response.(*RasterImageReply).Image, ShouldNotBeNil)
 		})
 
 		Convey("returns an image with the correct width when specified", func() {
@@ -275,7 +293,7 @@ func Test_Processing(t *testing.T) {
 			}
 
 			raster.Run()
-			img, err := raster.GeneratePage(2, 1024, 0)
+			img, err := raster.GeneratePageImage(2, 1024, 0)
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -290,7 +308,7 @@ func Test_Processing(t *testing.T) {
 			}
 
 			raster.Run()
-			img, err := raster.GeneratePage(2, 0, 1.1)
+			img, err := raster.GeneratePageImage(2, 0, 1.1)
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -305,7 +323,7 @@ func Test_Processing(t *testing.T) {
 			}
 
 			raster.Run()
-			img, err := raster.GeneratePage(2, 1024, 1.1) // Specify BOTH
+			img, err := raster.GeneratePageImage(2, 1024, 1.1) // Specify BOTH
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -321,7 +339,7 @@ func Test_Processing(t *testing.T) {
 
 			// PORTRAIT
 			raster.Run()
-			img, err := raster.GeneratePage(2, 0, 0) // Specify NEITHER scale nor width
+			img, err := raster.GeneratePageImage(2, 0, 0) // Specify NEITHER scale nor width
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -333,7 +351,7 @@ func Test_Processing(t *testing.T) {
 			raster = NewRasterizer("fixtures/landscape-sample.pdf")
 			raster.Run()
 
-			img, err = raster.GeneratePage(1, 0, 0) // Specify NEITHER scale nor width
+			img, err = raster.GeneratePageImage(1, 0, 0) // Specify NEITHER scale nor width
 			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
 
@@ -359,44 +377,26 @@ func Test_Processing(t *testing.T) {
 			var err1, err2, err3, err4 error
 			var img1, img2, img3, img4 image.Image
 
-			// These are used in the goroutines instead of checking imgX individually
-			// as ShouldNotBeNil, because something about the copying in the test
-			// framework seems to make that take about 1 second each! Doing it this
-			// way shaves about 3 seconds off the tests.
-			var ok1, ok2, ok3, ok4 bool
-
 			var wg sync.WaitGroup
 			wg.Add(8)
 
 			go func() {
-				img1, err1 = raster.GeneratePage(1, 1024, 0)
-				if img1 != nil {
-					ok1 = true
-				}
+				img1, err1 = raster.GeneratePageImage(1, 1024, 0)
 				wg.Done()
 			}()
 
 			go func() {
-				img2, err2 = raster.GeneratePage(1, 1024, 0)
-				if img2 != nil {
-					ok2 = true
-				}
+				img2, err2 = raster.GeneratePageImage(1, 1024, 0)
 				wg.Done()
 			}()
 
 			go func() {
-				img3, err3 = raster.GeneratePage(2, 1024, 0)
-				if img3 != nil {
-					ok3 = true
-				}
+				img3, err3 = raster.GeneratePageImage(2, 1024, 0)
 				wg.Done()
 			}()
 
 			go func() {
-				img4, err4 = raster.GeneratePage(2, 1024, 0)
-				if img4 != nil {
-					ok4 = true
-				}
+				img4, err4 = raster.GeneratePageImage(2, 1024, 0)
 				wg.Done()
 			}()
 
@@ -404,23 +404,59 @@ func Test_Processing(t *testing.T) {
 			for i := 0; i < 4; i++ {
 				page := i%2 + 1
 				go func() {
-					raster.GeneratePage(page, 1024, 0)
+					raster.GeneratePageImage(page, 1024, 0)
 					wg.Done()
 				}()
 			}
 
 			wg.Wait()
 
-			// Checking these is really slow... about 1 second each
-			So(ok1, ShouldBeTrue)
-			So(ok2, ShouldBeTrue)
-			So(ok3, ShouldBeTrue)
-			So(ok4, ShouldBeTrue)
-
 			So(err1, ShouldBeNil)
 			So(err2, ShouldBeNil)
 			So(err3, ShouldBeNil)
 			So(err4, ShouldBeNil)
+
+			// Checking these using ShouldNotBeNil is really slow...
+			So(img1 != nil, ShouldBeTrue)
+			So(img2 != nil, ShouldBeTrue)
+			So(img3 != nil, ShouldBeTrue)
+			So(img4 != nil, ShouldBeTrue)
+
+			raster.Stop()
+		})
+
+		Convey("handles both image and SVG rasterisation simultaneously", func() {
+			if testing.Short() {
+				return
+			}
+
+			raster.Run()
+
+			var err1, err2 error
+			var img image.Image
+			var svg []byte
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			go func() {
+				img, err1 = raster.GeneratePageImage(1, 1024, 0)
+				wg.Done()
+			}()
+
+			go func() {
+				svg, err2 = raster.GeneratePageSVG(1, 1024, 0)
+				wg.Done()
+			}()
+
+			wg.Wait()
+
+			So(err1, ShouldBeNil)
+			So(err2, ShouldBeNil)
+
+			// Checking img using ShouldNotBeNil is really slow...
+			So(img != nil, ShouldBeTrue)
+			So(svg, ShouldNotBeNil)
 
 			raster.Stop()
 		})

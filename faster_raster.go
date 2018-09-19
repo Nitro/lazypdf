@@ -28,6 +28,13 @@ const (
 	PortraitScale  = 1.5
 )
 
+type rasterType int
+
+const (
+	RasterImage rasterType = iota
+	RasterSVG
+)
+
 var (
 	// A page was requested with an out of bounds page number.
 	ErrBadPage = errors.New("invalid page number")
@@ -47,16 +54,34 @@ func IsRasterTimeout(err error) bool {
 	return err == ErrRasterTimeout
 }
 
+type ReplyWrapper interface {
+	Error() error
+}
+
 type RasterRequest struct {
 	PageNumber int
 	Width      int
 	Scale      float64
-	ReplyChan  chan *RasterReply
+	RasterType rasterType
+	ReplyChan  chan ReplyWrapper
 }
 
 type RasterReply struct {
+	err error
+}
+
+func (r *RasterReply) Error() error {
+	return r.err
+}
+
+type RasterImageReply struct {
+	RasterReply
 	Image image.Image
-	Error error
+}
+
+type RasterSVGReply struct {
+	RasterReply
+	SVG []byte
 }
 
 // Rasterizer is an actor that runs on an event loop processing a request channel.
@@ -93,10 +118,10 @@ func NewRasterizer(filename string) *Rasterizer {
 	}
 }
 
-// GeneratePage is a synchronous interface to the processing engine and will
-// return a Go stdlib image.Image. Asynchronous requests can be put directly
-// into the RequestChan if needed rather than calling this function.
-func (r *Rasterizer) GeneratePage(pageNumber int, width int, scale float64) (image.Image, error) {
+// generatePage is a synchronous interface to the processing engine. Asynchronous
+// requests can be put directly into the RequestChan if needed rather than
+// calling this function.
+func (r *Rasterizer) generatePage(pageNumber int, width int, scale float64, rasterType rasterType) (ReplyWrapper, error) {
 	if !r.hasRun {
 		return nil, errors.New("Rasterizer has not been started!")
 	}
@@ -113,13 +138,14 @@ func (r *Rasterizer) GeneratePage(pageNumber int, width int, scale float64) (ima
 	// This channel must be buffered, or there is a race on the reply. If we
 	// don't start listening on the channel yet by the time the reply comes, then
 	// we will wait until the RasterTimeout and miss the returned response.
-	replyChan := make(chan *RasterReply, 1)
+	replyChan := make(chan ReplyWrapper, 1)
 
 	// Pass the request to the rendering function via the channel
 	r.RequestChan <- &RasterRequest{
 		PageNumber: pageNumber,
 		Width:      width,
 		Scale:      scale,
+		RasterType: rasterType,
 		ReplyChan:  replyChan,
 	}
 
@@ -128,10 +154,36 @@ func (r *Rasterizer) GeneratePage(pageNumber int, width int, scale float64) (ima
 	case response := <-replyChan:
 		close(replyChan)
 		replyChan = nil
-		return response.Image, response.Error
+
+		err := response.Error()
+		if err != nil {
+			return nil, err
+		}
+		return response, nil
+
 	case <-time.After(RasterTimeout):
 		return nil, ErrRasterTimeout
 	}
+}
+
+// GeneratePageImage is a synchronous interface to the processing engine and will
+// return a Go stdlib image.Image.
+func (r *Rasterizer) GeneratePageImage(pageNumber int, width int, scale float64) (image.Image, error) {
+	response, err := r.generatePage(pageNumber, width, scale, RasterImage)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.(*RasterImageReply).Image, nil
+}
+
+func (r *Rasterizer) GeneratePageSVG(pageNumber int, width int, scale float64) ([]byte, error) {
+	response, err := r.generatePage(pageNumber, width, scale, RasterSVG)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.(*RasterSVGReply).SVG, nil
 }
 
 // Run starts the main even loop after allocating some resources. This needs to be
@@ -328,7 +380,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	if r.quitChan == nil || r.Ctx == nil || r.Document == nil {
 		select {
 		case req.ReplyChan <- &RasterReply{
-			Error: errors.New("Tried to process a page from a closed document: " + r.Filename),
+			err: errors.New("Tried to process a page from a closed document: " + r.Filename),
 		}:
 			// nothing
 		}
@@ -338,7 +390,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	if req.PageNumber < 1 || req.PageNumber > r.docPageCount {
 		// Try to reply but don't block if something happened to the reply channel
 		select {
-		case req.ReplyChan <- &RasterReply{Error: ErrBadPage}:
+		case req.ReplyChan <- &RasterReply{err: ErrBadPage}:
 			log.Warnf("Requested invalid page %d out of total document page count %d", req.PageNumber, r.docPageCount)
 		default:
 			log.Warnf(
@@ -350,10 +402,11 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	}
 
 	// Create a clone of r.Ctx for objects that are allocated for rendering the current page
+	// This needs to be disposed on all return paths below!
 	ctx := C.fz_clone_context(r.Ctx)
 	if ctx == nil {
 		select {
-		case req.ReplyChan <- &RasterReply{Error: errors.New("failed to clone context")}:
+		case req.ReplyChan <- &RasterReply{err: errors.New("failed to clone context")}:
 			// nothing
 		default:
 			log.Warnf(
@@ -365,9 +418,10 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	}
 
 	// Load the page and allocate C structure, freed later
+	// This needs to be disposed on all return paths below!
 	page := C.load_page(ctx, r.Document, C.int(req.PageNumber-1))
 	if page == nil {
-		req.ReplyChan <- &RasterReply{Error: ErrBadPage}
+		req.ReplyChan <- &RasterReply{err: ErrBadPage}
 	}
 
 	C.fz_bound_page(ctx, page, bounds)
@@ -387,11 +441,20 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	C.fz_transform_rect(bounds, &matrix)
 	C.fz_round_rect(bbox, bounds)
 
+	// Bail out early when rendering to SVG
+	if req.RasterType == RasterSVG {
+		// ctx and page will be disposed inside this method
+		r.renderToSVG(ctx, page, bounds, req)
+		return
+	}
+
 	// Free list in backgroundRender when we're done with it
 	list := C.fz_new_display_list(ctx, bounds)
 
 	device := C.fz_new_list_device(ctx, list)
 
+	// TODO: Pass in a cookie instead of nil, so we can cancel the operation if
+	// it takes too long.
 	C.fz_run_page(ctx, page, device, &C.fz_identity, nil)
 	C.fz_close_device(ctx, device)
 	C.fz_drop_device(ctx, device)
@@ -411,6 +474,62 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// any additional pages that have been requested!
 	r.backgroundRenderWg.Add(1)
 	go r.backgroundRender(ctx, pixmap, list, bounds, bbox, matrix, r.scaleFactor, bytes, req)
+}
+
+// renderToSVG renders the requested page to an SVG string
+// TODO: Check if we can do some of this processing async
+func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bounds *C.struct_fz_rect_s, req *RasterRequest) {
+	// Clean up earlier allocated C data structures when we've completed this
+	defer func() {
+		C.fz_drop_page(ctx, page)
+
+		// Free the cloned context
+		C.fz_drop_context(ctx)
+	}()
+
+	// TODO: Optimise the initial size of the buffer. For example,
+	// use 1024 as the initial value and cache the actual value if bigger.
+	// Once a new page is requested, pass the cached value to fz_new_buffer.
+	buf := C.fz_new_buffer(ctx, 1024)
+	defer C.fz_drop_buffer(ctx, buf)
+
+	out := C.fz_new_output_with_buffer(ctx, buf)
+	defer C.fz_drop_output(ctx, out)
+
+	// Use the default values for text_format and reuse_images from fz_new_svg_writer
+	device := C.fz_new_svg_device(ctx, out, bounds.x1-bounds.x0, bounds.y1-bounds.y0, C.FZ_SVG_TEXT_AS_PATH, 1)
+
+	// TODO: Pass in a cookie instead of nil, so we can cancel the operation if
+	// it takes too long.
+	C.fz_run_page(ctx, page, device, &C.fz_identity, nil)
+
+	// Signal the end of input and flush any buffered output.
+	// See comment above fz_close_device
+	C.fz_close_device(ctx, device)
+	C.fz_drop_device(ctx, device)
+
+	// Fetch the SVG as a byte array instead of string (by calling fz_string_from_buffer),
+	// so we won't have to convert it to a byte array later when passing it to a io.Writer.
+	var bufferContents *C.uchar
+	length := C.fz_buffer_storage(ctx, buf, &bufferContents)
+	if length == 0 {
+		select {
+		case req.ReplyChan <- &RasterReply{err: errors.New("failed to fetch the SVG data")}:
+			// nothing
+		default:
+			log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
+		}
+		return
+	}
+	svgBytes := C.GoBytes(unsafe.Pointer(bufferContents), C.int(length))
+
+	// Try to reply, but don't get stuck if something happened to the channel
+	select {
+	case req.ReplyChan <- &RasterSVGReply{SVG: svgBytes}:
+		//nothing
+	default:
+		log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
+	}
 }
 
 // backgroundRender handles the portion of the rasterization that can be done
@@ -455,7 +574,7 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 
 	// Try to reply, but don't get stuck if something happened to the channel
 	select {
-	case req.ReplyChan <- &RasterReply{Image: rgbaImage}:
+	case req.ReplyChan <- &RasterImageReply{Image: rgbaImage}:
 		//nothing
 	default:
 		log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
