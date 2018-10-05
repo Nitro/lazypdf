@@ -13,7 +13,7 @@ import (
 )
 
 // #cgo CFLAGS: -I. -I./mupdf/include -I./mupdf/include/mupdf -I./mupdf/thirdparty/openjpeg -I./mupdf/thirdparty/jbig2dec -I./mupdf/thirdparty/zlib -I./mupdf/thirdparty/jpeg -I./mupdf/thirdparty/freetype
-// #cgo LDFLAGS: -L./mupdf/build/release -lmupdf -lmupdfthird -lm -lcrypto -lpthread
+// #cgo LDFLAGS: -L./mupdf/build/release -lmupdf -lmupdf-third -lm -lcrypto -lpthread
 // #include <faster_raster.h>
 import "C"
 
@@ -349,8 +349,6 @@ func (r *Rasterizer) scalePage(page *C.fz_page, bounds *C.fz_rect, req *RasterRe
 // in the document and tries to figure out if any of them are landscape pages. If
 // so, it will default to LandscapeScale.
 func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
-	bounds := new(C.fz_rect)
-
 	var page *C.fz_page
 	for i := 0; i < pageCount; i++ {
 		page = C.load_page(r.Ctx, r.Document, C.int(i))
@@ -358,8 +356,8 @@ func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
 			continue
 		}
 
-		C.fz_bound_page(r.Ctx, page, bounds)
-		r.scaleFactor = r.scalePage(page, bounds, nil)
+		bounds := C.fz_bound_page(r.Ctx, page)
+		r.scaleFactor = r.scalePage(page, &bounds, nil)
 		C.fz_drop_page(r.Ctx, page)
 
 		if r.scaleFactor == LandscapeScale {
@@ -374,9 +372,6 @@ func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
 //  will be used. Width overrides any scale factor and will be rendered to as close
 //  to that exact dimension as possible, if it's supplied.
 func (r *Rasterizer) processOne(req *RasterRequest) {
-	bounds := new(C.fz_rect)
-	bbox := new(C.fz_irect)
-
 	if r.quitChan == nil || r.Ctx == nil || r.Document == nil {
 		select {
 		case req.ReplyChan <- &RasterReply{
@@ -424,7 +419,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		req.ReplyChan <- &RasterReply{err: ErrBadPage}
 	}
 
-	C.fz_bound_page(ctx, page, bounds)
+	bounds := C.fz_bound_page(ctx, page)
 
 	// If we haven't already scaled this thing, and the request doesn't specify
 	// then let's scale it for the whole doc.
@@ -432,19 +427,18 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		r.calculateScaleForDocument(r.docPageCount)
 	} else {
 		// Do the logic to figure out how we scale this thing.
-		r.scaleFactor = r.scalePage(page, bounds, req)
+		r.scaleFactor = r.scalePage(page, &bounds, req)
 	}
 
-	var matrix C.fz_matrix
-	C.fz_scale(&matrix, C.float(r.scaleFactor), C.float(r.scaleFactor))
+	matrix := C.fz_scale(C.float(r.scaleFactor), C.float(r.scaleFactor))
 
-	C.fz_transform_rect(bounds, &matrix)
-	C.fz_round_rect(bbox, bounds)
+	bounds = C.fz_transform_rect(bounds, matrix)
+	bbox := C.fz_round_rect(bounds)
 
 	// Bail out early when rendering to SVG
 	if req.RasterType == RasterSVG {
 		// ctx and page will be disposed inside this method
-		r.renderToSVG(ctx, page, bounds, req)
+		r.renderToSVG(ctx, page, &bounds, req)
 		return
 	}
 
@@ -455,7 +449,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 
 	// TODO: Pass in a cookie instead of nil, so we can cancel the operation if
 	// it takes too long.
-	C.fz_run_page(ctx, page, device, &C.fz_identity, nil)
+	C.fz_run_page(ctx, page, device, C.fz_identity, nil)
 	C.fz_close_device(ctx, device)
 	C.fz_drop_device(ctx, device)
 	C.fz_drop_page(ctx, page)
@@ -473,7 +467,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// The rest we can background and let the main loop return to processing
 	// any additional pages that have been requested!
 	r.backgroundRenderWg.Add(1)
-	go r.backgroundRender(ctx, pixmap, list, bounds, bbox, matrix, r.scaleFactor, bytes, req)
+	go r.backgroundRender(ctx, pixmap, list, bounds, &bbox, matrix, r.scaleFactor, bytes, req)
 }
 
 // renderToSVG renders the requested page to an SVG string
@@ -501,7 +495,7 @@ func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bo
 
 	// TODO: Pass in a cookie instead of nil, so we can cancel the operation if
 	// it takes too long.
-	C.fz_run_page(ctx, page, device, &C.fz_identity, nil)
+	C.fz_run_page(ctx, page, device, C.fz_identity, nil)
 
 	// Signal the end of input and flush any buffered output.
 	// See comment above fz_close_device
@@ -537,7 +531,7 @@ func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bo
 func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	pixmap *C.struct_fz_pixmap_s,
 	list *C.struct_fz_display_list_s,
-	bounds *C.struct_fz_rect_s,
+	bounds C.struct_fz_rect_s,
 	bbox *C.struct_fz_irect_s,
 	matrix C.struct_fz_matrix_s,
 	scaleFactor float64,
@@ -557,11 +551,11 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	}()
 
 	// Set up the draw device from the cloned context
-	drawDevice := C.fz_new_draw_device(ctx, &matrix, pixmap)
+	drawDevice := C.fz_new_draw_device(ctx, matrix, pixmap)
 
 	// Take the commands from the display list and run them on the
 	// draw device
-	C.fz_run_display_list(ctx, list, drawDevice, &C.fz_identity, bounds, nil)
+	C.fz_run_display_list(ctx, list, drawDevice, C.fz_identity, bounds, nil)
 	C.fz_close_device(ctx, drawDevice)
 	C.fz_drop_device(ctx, drawDevice)
 

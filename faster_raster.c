@@ -169,7 +169,7 @@ static pdf_obj *pdf_lookup_inherited_page_item(fz_context * ctx, pdf_obj * node,
 			if (pdf_mark_obj(ctx, node))
 				fz_throw(ctx, FZ_ERROR_GENERIC,
 					 "cycle in page tree (parents)");
-			node = pdf_dict_get(ctx, node, PDF_NAME_Parent);
+			node = pdf_dict_get(ctx, node, PDF_NAME(Parent));
 		}
 		while (node);
 	}
@@ -178,7 +178,7 @@ static pdf_obj *pdf_lookup_inherited_page_item(fz_context * ctx, pdf_obj * node,
 			pdf_unmark_obj(ctx, node2);
 			if (node2 == node)
 				break;
-			node2 = pdf_dict_get(ctx, node2, PDF_NAME_Parent);
+			node2 = pdf_dict_get(ctx, node2, PDF_NAME(Parent));
 		}
 		while (node2);
 	}
@@ -195,7 +195,7 @@ int get_rotation(fz_context * ctx, fz_page * page) {
 	pdf_obj *page_obj = ((pdf_page *) page)->obj;
 	return pdf_to_int(ctx,
 			  pdf_lookup_inherited_page_item(ctx, page_obj,
-							 PDF_NAME_Rotate));
+							 PDF_NAME(Rotate)));
 }
 
 // Wrapper for fz_load_page which returns NULL when an invalid page number
