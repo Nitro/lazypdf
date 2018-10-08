@@ -1,10 +1,5 @@
-#include <fitz.h>
-#include <pdf/name-table.h>
-#include <pdf/object.h>
-#include <pdf/document.h>
+#include <pdf.h>
 #include <pthread.h>
-#include <pdf/page.h>
-
 #include <stdlib.h>
 
 // indent -linux -br -brf

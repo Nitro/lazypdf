@@ -6,7 +6,7 @@ if [ ! -z ${SHALLOW_CLONE} ]; then
 	SHALLOW_CLONE="--depth 1 --no-shallow-submodules"
 fi
 
-MUPDF_VERSION="1.13.0"
+MUPDF_VERSION="1.14.0"
 
 if [[ ! -d mupdf ]]; then
 	echo "Downloading muPDF..."
