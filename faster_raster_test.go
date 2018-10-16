@@ -34,7 +34,8 @@ func Test_Run(t *testing.T) {
 
 		Convey("rasterizer stops", func() {
 			raster := NewRasterizer("fixtures/sample.pdf")
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 
 			// We have to give the background goroutine a little time to start :(
 			time.Sleep(5 * time.Millisecond)
@@ -54,12 +55,13 @@ func Test_Run(t *testing.T) {
 func Test_getRotation(t *testing.T) {
 	Convey("Identifies the page rotation", t, func() {
 		raster := NewRasterizer("fixtures/rotated-sample.pdf")
-		raster.Run()
+		err := raster.Run()
+		So(err, ShouldBeNil)
 
-		rot, err := raster.getRotation(0)
+		_, err = raster.getRotation(0)
 		So(err, ShouldEqual, ErrBadPage)
 
-		rot, err = raster.getRotation(1)
+		rot, err := raster.getRotation(1)
 		So(err, ShouldBeNil)
 		So(rot, ShouldEqual, 180)
 
@@ -76,7 +78,8 @@ func Test_scalePage(t *testing.T) {
 		Convey("handles landscape pages", func() {
 			Convey("as LandscapeScale when pages really are", func() {
 				raster := NewRasterizer("fixtures/landscape-sample.pdf")
-				raster.Run()
+				err := raster.Run()
+				So(err, ShouldBeNil)
 
 				img, err := raster.GeneratePageImage(1, 0, 0)
 
@@ -88,7 +91,8 @@ func Test_scalePage(t *testing.T) {
 
 			Convey("as PortraitScale when pages were rotated", func() {
 				raster := NewRasterizer("fixtures/rotated-sample.pdf")
-				raster.Run()
+				err := raster.Run()
+				So(err, ShouldBeNil)
 				img, err := raster.GeneratePageImage(1, 0, 0)
 
 				So(err, ShouldBeNil)
@@ -100,7 +104,8 @@ func Test_scalePage(t *testing.T) {
 
 		Convey("handles portrait pages as PortraitScale", func() {
 			raster := NewRasterizer("fixtures/sample.pdf")
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(1, 0, 0)
 
 			So(err, ShouldBeNil)
@@ -111,7 +116,8 @@ func Test_scalePage(t *testing.T) {
 
 		Convey("uses LandscapeScale if any page is landscape", func() {
 			raster := NewRasterizer("fixtures/mixed-sample.pdf")
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 0, 0)
 
 			So(err, ShouldBeNil)
@@ -122,7 +128,8 @@ func Test_scalePage(t *testing.T) {
 
 		Convey("uses specified scale if there is one", func() {
 			raster := NewRasterizer("fixtures/mixed-sample.pdf")
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 0, 0.5)
 
 			So(err, ShouldBeNil)
@@ -137,9 +144,10 @@ func Test_WithoutFileExtensions(t *testing.T) {
 	Convey("When the file has no file extension", t, func() {
 		Convey("but it is a PDF file, so it should work", func() {
 			raster := NewRasterizer("fixtures/sample_no_extension")
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 
-			_, err := raster.GeneratePageImage(1, 1024, 0)
+			_, err = raster.GeneratePageImage(1, 1024, 0)
 			So(err, ShouldBeNil)
 
 			raster.Stop()
@@ -221,7 +229,8 @@ func Test_Processing(t *testing.T) {
 		})
 
 		Convey("returns an error when the rasterizer has been stopped", func() {
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 
 			// We have to give the background goroutine a little time to start :(
 			time.Sleep(5 * time.Millisecond)
@@ -230,7 +239,7 @@ func Test_Processing(t *testing.T) {
 			go raster.Stop()
 			<-raster.stopCompleted
 
-			_, err := raster.GeneratePageImage(1, 1024, 0)
+			_, err = raster.GeneratePageImage(1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has been stopped")
@@ -252,7 +261,8 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 
 			// We have to give the background goroutine a little time to start :(
 			time.Sleep(5 * time.Millisecond)
@@ -277,7 +287,6 @@ func Test_Processing(t *testing.T) {
 			select {
 			case response = <-replyChan:
 				close(replyChan)
-				replyChan = nil
 			case <-time.After(RasterTimeout):
 				timeoutOccured = true
 			}
@@ -292,7 +301,8 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 1024, 0)
 
 			So(err, ShouldBeNil)
@@ -307,7 +317,8 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 0, 1.1)
 
 			So(err, ShouldBeNil)
@@ -322,7 +333,8 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 1024, 1.1) // Specify BOTH
 
 			So(err, ShouldBeNil)
@@ -338,7 +350,8 @@ func Test_Processing(t *testing.T) {
 			}
 
 			// PORTRAIT
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 0, 0) // Specify NEITHER scale nor width
 
 			So(err, ShouldBeNil)
@@ -349,7 +362,8 @@ func Test_Processing(t *testing.T) {
 
 			// LANDSCAPE
 			raster = NewRasterizer("fixtures/landscape-sample.pdf")
-			raster.Run()
+			err = raster.Run()
+			So(err, ShouldBeNil)
 
 			img, err = raster.GeneratePageImage(1, 0, 0) // Specify NEITHER scale nor width
 			So(img, ShouldNotBeNil)
@@ -360,7 +374,8 @@ func Test_Processing(t *testing.T) {
 		})
 
 		Convey("counts the number of pages in the document when raster starts", func() {
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 
 			So(raster.docPageCount, ShouldEqual, 2)
 
@@ -372,7 +387,8 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 
 			var err1, err2, err3, err4 error
 			var img1, img2, img3, img4 image.Image
@@ -404,7 +420,8 @@ func Test_Processing(t *testing.T) {
 			for i := 0; i < 4; i++ {
 				page := i%2 + 1
 				go func() {
-					raster.GeneratePageImage(page, 1024, 0)
+					// Ignore the image and error here for now
+					_, _ = raster.GeneratePageImage(page, 1024, 0)
 					wg.Done()
 				}()
 			}
@@ -430,7 +447,8 @@ func Test_Processing(t *testing.T) {
 				return
 			}
 
-			raster.Run()
+			err := raster.Run()
+			So(err, ShouldBeNil)
 
 			var err1, err2 error
 			var img image.Image
