@@ -5,6 +5,7 @@ package lazypdf
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"sync"
 	"time"
@@ -57,6 +58,7 @@ type ReplyWrapper interface {
 }
 
 type RasterRequest struct {
+	ctx        context.Context
 	PageNumber int
 	Width      int
 	Scale      float64
@@ -145,6 +147,7 @@ func (r *Rasterizer) generatePage(ctx context.Context, pageNumber int, width int
 
 	// Pass the request to the rendering function via the channel
 	req := RasterRequest{
+		ctx:        ctx,
 		PageNumber: pageNumber,
 		Width:      width,
 		Scale:      scale,
@@ -379,6 +382,51 @@ func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
 	}
 }
 
+func sendErrorReply(req *RasterRequest, filename string, err error) {
+	select {
+	case req.ReplyChan <- &RasterReply{err: err}:
+		// nothing
+	default:
+		log.Warnf("Failed to send reply for %q page %d", filename, req.PageNumber)
+	}
+}
+
+// runCancellableOperation sets cookie.abort to 1 if the caller bailed out early to
+// instruct MuPDF to terminate the pending operation as soon as possible
+func runCancellableOperation(req *RasterRequest, filename string, fn func(*C.fz_cookie)) error {
+	if req.ctx == nil {
+		// In this case, the caller doesn't want to bail out early
+		fn(nil)
+
+		return nil
+	}
+
+	var cookie C.fz_cookie
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-req.ctx.Done():
+			cookie.abort = 1
+		case <-done:
+			// Processing finished
+		}
+	}()
+
+	// Run our MuPDF function
+	fn(&cookie)
+
+	// Instruct the above goroutine to exit
+	close(done)
+
+	if err := req.ctx.Err(); err != nil || cookie.errors > 0 {
+		log.Infof("Operation cancelled upstream: %s", err)
+		sendErrorReply(req, filename, ErrBadPage)
+		return ErrBadPage
+	}
+
+	return nil
+}
+
 //  processOne does all the work of actually rendering a page and is run in a loop
 //  from Run(). In rendering you can supply either the fixed output width, or a
 //  scale factor. If not supplied, scale factor will default to 1.5. If supplied it
@@ -386,26 +434,13 @@ func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
 //  to that exact dimension as possible, if it's supplied.
 func (r *Rasterizer) processOne(req *RasterRequest) {
 	if r.quitChan == nil || r.Ctx == nil || r.Document == nil {
-		select {
-		case req.ReplyChan <- &RasterReply{
-			err: errors.New("Tried to process a page from a closed document: " + r.Filename),
-		}:
-			// nothing
-		}
+		sendErrorReply(req, r.Filename, fmt.Errorf("Tried to process a page from a closed document %q", r.Filename))
 		return
 	}
 
 	if req.PageNumber < 1 || req.PageNumber > r.docPageCount {
-		// Try to reply but don't block if something happened to the reply channel
-		select {
-		case req.ReplyChan <- &RasterReply{err: ErrBadPage}:
-			log.Warnf("Requested invalid page %d out of total document page count %d", req.PageNumber, r.docPageCount)
-		default:
-			log.Warnf(
-				"Failed to reply for %s page %d, with bad page error",
-				r.Filename, req.PageNumber,
-			)
-		}
+		log.Warnf("Requested invalid page %d out of total page count %d from file %q", req.PageNumber, r.docPageCount, r.Filename)
+		sendErrorReply(req, r.Filename, ErrBadPage)
 		return
 	}
 
@@ -413,15 +448,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// This needs to be disposed on all return paths below!
 	ctx := C.fz_clone_context(r.Ctx)
 	if ctx == nil {
-		select {
-		case req.ReplyChan <- &RasterReply{err: errors.New("failed to clone context")}:
-			// nothing
-		default:
-			log.Warnf(
-				"Failed to reply for %s page %d, with clone context error",
-				r.Filename, req.PageNumber,
-			)
-		}
+		sendErrorReply(req, r.Filename, errors.New("failed to clone context"))
 		return
 	}
 
@@ -432,15 +459,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		// Free the cloned context
 		C.fz_drop_context(ctx)
 
-		select {
-		case req.ReplyChan <- &RasterReply{err: ErrBadPage}:
-			// nothing
-		default:
-			log.Warnf(
-				"Failed to reply for %s page %d, with bad page error",
-				r.Filename, req.PageNumber,
-			)
-		}
+		sendErrorReply(req, r.Filename, ErrBadPage)
 		return
 	}
 
@@ -472,12 +491,22 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 
 	device := C.fz_new_list_device(ctx, list)
 
-	// TODO: Pass in a cookie instead of nil, so we can cancel the operation if
-	// it takes too long.
-	C.fz_run_page(ctx, page, device, C.fz_identity, nil)
+	err := runCancellableOperation(req, r.Filename,
+		func(cookie *C.fz_cookie) {
+			C.fz_run_page(ctx, page, device, C.fz_identity, cookie)
+		},
+	)
 	C.fz_close_device(ctx, device)
 	C.fz_drop_device(ctx, device)
 	C.fz_drop_page(ctx, page)
+	if err != nil {
+		C.fz_drop_display_list(ctx, list)
+		// Free the cloned context
+		C.fz_drop_context(ctx)
+
+		// runCancellableOperation already replied with an error
+		return
+	}
 
 	bytes := make([]byte, 4*bbox.x1*bbox.y1)
 	// We take the Go buffer we made and pass a pointer into the C lib.
@@ -518,26 +547,25 @@ func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bo
 	// Use the default values for text_format and reuse_images from fz_new_svg_writer
 	device := C.fz_new_svg_device(ctx, out, bounds.x1-bounds.x0, bounds.y1-bounds.y0, C.FZ_SVG_TEXT_AS_PATH, 1)
 
-	// TODO: Pass in a cookie instead of nil, so we can cancel the operation if
-	// it takes too long.
-	C.fz_run_page(ctx, page, device, C.fz_identity, nil)
+	err := runCancellableOperation(req, r.Filename,
+		func(cookie *C.fz_cookie) {
+			C.fz_run_page(ctx, page, device, C.fz_identity, cookie)
+		},
+	)
 
-	// Signal the end of input and flush any buffered output.
-	// See comment above fz_close_device
 	C.fz_close_device(ctx, device)
 	C.fz_drop_device(ctx, device)
+	if err != nil {
+		// runCancellableOperation already replied with an error
+		return
+	}
 
 	// Fetch the SVG as a byte array instead of string (by calling fz_string_from_buffer),
 	// so we won't have to convert it to a byte array later when passing it to a io.Writer.
 	var bufferContents *C.uchar
 	length := C.fz_buffer_storage(ctx, buf, &bufferContents)
 	if length == 0 {
-		select {
-		case req.ReplyChan <- &RasterReply{err: errors.New("failed to fetch the SVG data")}:
-			// nothing
-		default:
-			log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
-		}
+		sendErrorReply(req, r.Filename, errors.New("failed to fetch the SVG data"))
 		return
 	}
 	svgBytes := C.GoBytes(unsafe.Pointer(bufferContents), C.int(length))
@@ -580,9 +608,17 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 
 	// Take the commands from the display list and run them on the
 	// draw device
-	C.fz_run_display_list(ctx, list, drawDevice, C.fz_identity, bounds, nil)
+	err := runCancellableOperation(req, r.Filename,
+		func(cookie *C.fz_cookie) {
+			C.fz_run_display_list(ctx, list, drawDevice, C.fz_identity, bounds, cookie)
+		},
+	)
 	C.fz_close_device(ctx, drawDevice)
 	C.fz_drop_device(ctx, drawDevice)
+	if err != nil {
+		// runCancellableOperation already replied with an error
+		return
+	}
 
 	log.Debugf("Pixmap w: %d, h: %d, scale: %.2f", pixmap.w, pixmap.h, scaleFactor)
 
