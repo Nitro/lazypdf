@@ -213,6 +213,18 @@ func Test_Processing(t *testing.T) {
 			raster.Stop()
 		})
 
+		Convey("returns an error when the image raster request is cancelled", func() {
+			err := raster.Run()
+			defer raster.Stop()
+			So(err, ShouldBeNil)
+
+			ctx, doneFunc := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			defer doneFunc()
+
+			_, err = raster.GeneratePageImage(ctx, 2, 1024, 0)
+			So(err, ShouldEqual, ErrRasterTimeout)
+		})
+
 		Convey("returns an SVG and no error when things go well", func() {
 			if testing.Short() {
 				return
@@ -228,6 +240,18 @@ func Test_Processing(t *testing.T) {
 			So(string(svg), ShouldContainSubstring, "</clipPath>")
 			So(string(svg), ShouldEndWith, "</svg>\n")
 			raster.Stop()
+		})
+
+		Convey("returns an error when the SVG raster request is cancelled", func() {
+			err := raster.Run()
+			defer raster.Stop()
+			So(err, ShouldBeNil)
+
+			ctx, doneFunc := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			defer doneFunc()
+
+			_, err = raster.GeneratePageSVG(ctx, 2, 1024, 0)
+			So(err, ShouldEqual, ErrRasterTimeout)
 		})
 
 		Convey("returns an error when the rasterizer has been stopped", func() {
