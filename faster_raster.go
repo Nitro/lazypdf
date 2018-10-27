@@ -3,6 +3,7 @@
 package lazypdf
 
 import (
+	"context"
 	"errors"
 	"image"
 	"sync"
@@ -120,7 +121,7 @@ func NewRasterizer(filename string, parallelRequests int) *Rasterizer {
 // generatePage is a synchronous interface to the processing engine. Asynchronous
 // requests can be put directly into the RequestChan if needed rather than
 // calling this function.
-func (r *Rasterizer) generatePage(pageNumber int, width int, scale float64, rasterType rasterType) (ReplyWrapper, error) {
+func (r *Rasterizer) generatePage(ctx context.Context, pageNumber int, width int, scale float64, rasterType rasterType) (ReplyWrapper, error) {
 	if !r.hasRun {
 		return nil, errors.New("Rasterizer has not been started!")
 	}
@@ -139,13 +140,24 @@ func (r *Rasterizer) generatePage(pageNumber int, width int, scale float64, rast
 	// we will wait until the RasterTimeout and miss the returned response.
 	replyChan := make(chan ReplyWrapper, 1)
 
+	ctx, cancelFunc := context.WithTimeout(ctx, RasterTimeout)
+	defer cancelFunc()
+
 	// Pass the request to the rendering function via the channel
-	r.RequestChan <- &RasterRequest{
+	req := RasterRequest{
 		PageNumber: pageNumber,
 		Width:      width,
 		Scale:      scale,
 		RasterType: rasterType,
 		ReplyChan:  replyChan,
+	}
+	select {
+	// Try to send the request to the event loop
+	case r.RequestChan <- &req:
+		// Proceed to wait for the response
+	case <-ctx.Done():
+		// Bail out early if the processing pipeline is still full or the caller gave up
+		return nil, ErrRasterTimeout
 	}
 
 	// Wait for a reply or a timeout, whichever occurs first
@@ -159,15 +171,16 @@ func (r *Rasterizer) generatePage(pageNumber int, width int, scale float64, rast
 		}
 		return response, nil
 
-	case <-time.After(RasterTimeout):
+	case <-ctx.Done():
+		// We waited enough. Discard whatever we eventually render and bail out
 		return nil, ErrRasterTimeout
 	}
 }
 
 // GeneratePageImage is a synchronous interface to the processing engine and will
 // return a Go stdlib image.Image.
-func (r *Rasterizer) GeneratePageImage(pageNumber int, width int, scale float64) (image.Image, error) {
-	response, err := r.generatePage(pageNumber, width, scale, RasterImage)
+func (r *Rasterizer) GeneratePageImage(ctx context.Context, pageNumber int, width int, scale float64) (image.Image, error) {
+	response, err := r.generatePage(ctx, pageNumber, width, scale, RasterImage)
 	if err != nil {
 		return nil, err
 	}
@@ -175,8 +188,10 @@ func (r *Rasterizer) GeneratePageImage(pageNumber int, width int, scale float64)
 	return response.(*RasterImageReply).Image, nil
 }
 
-func (r *Rasterizer) GeneratePageSVG(pageNumber int, width int, scale float64) ([]byte, error) {
-	response, err := r.generatePage(pageNumber, width, scale, RasterSVG)
+// GeneratePageSVG is a synchronous interface to the processing engine and will
+// return a Go byte array containing the SVG string.
+func (r *Rasterizer) GeneratePageSVG(ctx context.Context, pageNumber int, width int, scale float64) ([]byte, error) {
+	response, err := r.generatePage(ctx, pageNumber, width, scale, RasterSVG)
 	if err != nil {
 		return nil, err
 	}

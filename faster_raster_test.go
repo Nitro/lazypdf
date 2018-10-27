@@ -1,6 +1,7 @@
 package lazypdf
 
 import (
+	"context"
 	"image"
 	"sync"
 	"testing"
@@ -81,7 +82,7 @@ func Test_scalePage(t *testing.T) {
 				err := raster.Run()
 				So(err, ShouldBeNil)
 
-				img, err := raster.GeneratePageImage(1, 0, 0)
+				img, err := raster.GeneratePageImage(context.Background(), 1, 0, 0)
 
 				So(err, ShouldBeNil)
 				So(img.Bounds().Max.X, ShouldEqual, 842)
@@ -93,7 +94,7 @@ func Test_scalePage(t *testing.T) {
 				raster := NewRasterizer("fixtures/rotated-sample.pdf", 1)
 				err := raster.Run()
 				So(err, ShouldBeNil)
-				img, err := raster.GeneratePageImage(1, 0, 0)
+				img, err := raster.GeneratePageImage(context.Background(), 1, 0, 0)
 
 				So(err, ShouldBeNil)
 				So(img.Bounds().Max.X, ShouldEqual, 842)
@@ -106,7 +107,7 @@ func Test_scalePage(t *testing.T) {
 			raster := NewRasterizer("fixtures/sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
-			img, err := raster.GeneratePageImage(1, 0, 0)
+			img, err := raster.GeneratePageImage(context.Background(), 1, 0, 0)
 
 			So(err, ShouldBeNil)
 			So(img.Bounds().Max.X, ShouldEqual, 893)
@@ -118,7 +119,7 @@ func Test_scalePage(t *testing.T) {
 			raster := NewRasterizer("fixtures/mixed-sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
-			img, err := raster.GeneratePageImage(2, 0, 0)
+			img, err := raster.GeneratePageImage(context.Background(), 2, 0, 0)
 
 			So(err, ShouldBeNil)
 			So(img.Bounds().Max.X, ShouldEqual, 612)
@@ -130,7 +131,7 @@ func Test_scalePage(t *testing.T) {
 			raster := NewRasterizer("fixtures/mixed-sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
-			img, err := raster.GeneratePageImage(2, 0, 0.5)
+			img, err := raster.GeneratePageImage(context.Background(), 2, 0, 0.5)
 
 			So(err, ShouldBeNil)
 			So(img.Bounds().Max.X, ShouldEqual, 306)
@@ -147,7 +148,7 @@ func Test_WithoutFileExtensions(t *testing.T) {
 			err := raster.Run()
 			So(err, ShouldBeNil)
 
-			_, err = raster.GeneratePageImage(1, 1024, 0)
+			_, err = raster.GeneratePageImage(context.Background(), 1, 1024, 0)
 			So(err, ShouldBeNil)
 
 			raster.Stop()
@@ -159,7 +160,7 @@ func Test_WithoutFileExtensions(t *testing.T) {
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "Unable to open document")
 
-			_, err = raster.GeneratePageImage(1, 1024, 0)
+			_, err = raster.GeneratePageImage(context.Background(), 1, 1024, 0)
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has been cleaned up")
 
@@ -174,7 +175,7 @@ func Test_Processing(t *testing.T) {
 		raster := NewRasterizer("fixtures/sample.pdf", 10)
 
 		Convey("returns an error when the rasterizer has not started", func() {
-			_, err := raster.GeneratePageImage(1, 1024, 0)
+			_, err := raster.GeneratePageImage(context.Background(), 1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has not been started")
@@ -185,12 +186,12 @@ func Test_Processing(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(raster.docPageCount, ShouldEqual, 2)
 
-			img, err := raster.GeneratePageImage(3, 1024, 0)
+			img, err := raster.GeneratePageImage(context.Background(), 3, 1024, 0)
 
 			So(img, ShouldBeNil)
 			So(err, ShouldEqual, ErrBadPage)
 
-			img, err = raster.GeneratePageImage(0, 1024, 0)
+			img, err = raster.GeneratePageImage(context.Background(), 0, 1024, 0)
 			So(img, ShouldBeNil)
 			So(err, ShouldEqual, ErrBadPage)
 
@@ -205,7 +206,7 @@ func Test_Processing(t *testing.T) {
 			err := raster.Run()
 			So(err, ShouldBeNil)
 
-			img, err := raster.GeneratePageImage(2, 1024, 0)
+			img, err := raster.GeneratePageImage(context.Background(), 2, 1024, 0)
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -220,7 +221,7 @@ func Test_Processing(t *testing.T) {
 			err := raster.Run()
 			So(err, ShouldBeNil)
 
-			svg, err := raster.GeneratePageSVG(2, 1024, 0)
+			svg, err := raster.GeneratePageSVG(context.Background(), 2, 1024, 0)
 
 			So(err, ShouldBeNil)
 			So(string(svg), ShouldStartWith, `<?xml version="1.0" encoding="UTF-8" standalone="no"?>`)
@@ -240,7 +241,7 @@ func Test_Processing(t *testing.T) {
 			go raster.Stop()
 			<-raster.stopCompleted
 
-			_, err = raster.GeneratePageImage(1, 1024, 0)
+			_, err = raster.GeneratePageImage(context.Background(), 1, 1024, 0)
 
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "has been stopped")
@@ -304,7 +305,7 @@ func Test_Processing(t *testing.T) {
 
 			err := raster.Run()
 			So(err, ShouldBeNil)
-			img, err := raster.GeneratePageImage(2, 1024, 0)
+			img, err := raster.GeneratePageImage(context.Background(), 2, 1024, 0)
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -320,7 +321,7 @@ func Test_Processing(t *testing.T) {
 
 			err := raster.Run()
 			So(err, ShouldBeNil)
-			img, err := raster.GeneratePageImage(2, 0, 1.1)
+			img, err := raster.GeneratePageImage(context.Background(), 2, 0, 1.1)
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -336,7 +337,7 @@ func Test_Processing(t *testing.T) {
 
 			err := raster.Run()
 			So(err, ShouldBeNil)
-			img, err := raster.GeneratePageImage(2, 1024, 1.1) // Specify BOTH
+			img, err := raster.GeneratePageImage(context.Background(), 2, 1024, 1.1) // Specify BOTH
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -353,7 +354,7 @@ func Test_Processing(t *testing.T) {
 			// PORTRAIT
 			err := raster.Run()
 			So(err, ShouldBeNil)
-			img, err := raster.GeneratePageImage(2, 0, 0) // Specify NEITHER scale nor width
+			img, err := raster.GeneratePageImage(context.Background(), 2, 0, 0) // Specify NEITHER scale nor width
 
 			So(err, ShouldBeNil)
 			So(img, ShouldNotBeNil)
@@ -366,7 +367,7 @@ func Test_Processing(t *testing.T) {
 			err = raster.Run()
 			So(err, ShouldBeNil)
 
-			img, err = raster.GeneratePageImage(1, 0, 0) // Specify NEITHER scale nor width
+			img, err = raster.GeneratePageImage(context.Background(), 1, 0, 0) // Specify NEITHER scale nor width
 			So(img, ShouldNotBeNil)
 			So(err, ShouldBeNil)
 
@@ -398,22 +399,22 @@ func Test_Processing(t *testing.T) {
 			wg.Add(8)
 
 			go func() {
-				img1, err1 = raster.GeneratePageImage(1, 1024, 0)
+				img1, err1 = raster.GeneratePageImage(context.Background(), 1, 1024, 0)
 				wg.Done()
 			}()
 
 			go func() {
-				img2, err2 = raster.GeneratePageImage(1, 1024, 0)
+				img2, err2 = raster.GeneratePageImage(context.Background(), 1, 1024, 0)
 				wg.Done()
 			}()
 
 			go func() {
-				img3, err3 = raster.GeneratePageImage(2, 1024, 0)
+				img3, err3 = raster.GeneratePageImage(context.Background(), 2, 1024, 0)
 				wg.Done()
 			}()
 
 			go func() {
-				img4, err4 = raster.GeneratePageImage(2, 1024, 0)
+				img4, err4 = raster.GeneratePageImage(context.Background(), 2, 1024, 0)
 				wg.Done()
 			}()
 
@@ -422,7 +423,7 @@ func Test_Processing(t *testing.T) {
 				page := i%2 + 1
 				go func() {
 					// Ignore the image and error here for now
-					_, _ = raster.GeneratePageImage(page, 1024, 0)
+					_, _ = raster.GeneratePageImage(context.Background(), page, 1024, 0)
 					wg.Done()
 				}()
 			}
@@ -459,12 +460,12 @@ func Test_Processing(t *testing.T) {
 			wg.Add(2)
 
 			go func() {
-				img, err1 = raster.GeneratePageImage(1, 1024, 0)
+				img, err1 = raster.GeneratePageImage(context.Background(), 1, 1024, 0)
 				wg.Done()
 			}()
 
 			go func() {
-				svg, err2 = raster.GeneratePageSVG(1, 1024, 0)
+				svg, err2 = raster.GeneratePageSVG(context.Background(), 1, 1024, 0)
 				wg.Done()
 			}()
 
