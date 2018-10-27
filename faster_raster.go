@@ -415,7 +415,19 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// This needs to be disposed on all return paths below!
 	page := C.load_page(ctx, r.Document, C.int(req.PageNumber-1))
 	if page == nil {
-		req.ReplyChan <- &RasterReply{err: ErrBadPage}
+		// Free the cloned context
+		C.fz_drop_context(ctx)
+
+		select {
+		case req.ReplyChan <- &RasterReply{err: ErrBadPage}:
+			// nothing
+		default:
+			log.Warnf(
+				"Failed to reply for %s page %d, with bad page error",
+				r.Filename, req.PageNumber,
+			)
+		}
+		return
 	}
 
 	bounds := C.fz_bound_page(ctx, page)
