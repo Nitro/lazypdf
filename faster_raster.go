@@ -21,9 +21,6 @@ const (
 	// We'll wait up to 10 seconds for a single page to Rasterize.
 	RasterTimeout = 10 * time.Second
 
-	// This many pages can be queued without blocking on the request.
-	RasterBufferSize = 10
-
 	LandscapeScale = 1.0
 	PortraitScale  = 1.5
 )
@@ -110,10 +107,12 @@ type Rasterizer struct {
 	stopCompleted      chan struct{}
 }
 
-func NewRasterizer(filename string) *Rasterizer {
+// NewRasterizer returns a configured Rasterizer for a given filename,
+// which is able to process parallelRequests requests simultaneously.
+func NewRasterizer(filename string, parallelRequests int) *Rasterizer {
 	return &Rasterizer{
 		Filename:    filename,
-		RequestChan: make(chan *RasterRequest, RasterBufferSize),
+		RequestChan: make(chan *RasterRequest, parallelRequests),
 		quitChan:    make(chan struct{}),
 	}
 }

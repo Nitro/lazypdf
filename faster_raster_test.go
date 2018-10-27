@@ -12,7 +12,7 @@ import (
 func Test_NewRasterizer(t *testing.T) {
 	Convey("NewRasterizer()", t, func() {
 		Convey("returns a properly configured struct", func() {
-			raster := NewRasterizer("foo")
+			raster := NewRasterizer("foo", 1)
 
 			So(raster.Filename, ShouldEqual, "foo")
 			So(raster.RequestChan, ShouldNotBeNil)
@@ -25,7 +25,7 @@ func Test_NewRasterizer(t *testing.T) {
 func Test_Run(t *testing.T) {
 	Convey("When Running and Stopping", t, func() {
 		Convey("rasterizer starts without error", func() {
-			raster := NewRasterizer("fixtures/sample.pdf")
+			raster := NewRasterizer("fixtures/sample.pdf", 1)
 			err := raster.Run()
 
 			So(err, ShouldBeNil)
@@ -33,7 +33,7 @@ func Test_Run(t *testing.T) {
 		})
 
 		Convey("rasterizer stops", func() {
-			raster := NewRasterizer("fixtures/sample.pdf")
+			raster := NewRasterizer("fixtures/sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
 
@@ -54,7 +54,7 @@ func Test_Run(t *testing.T) {
 
 func Test_getRotation(t *testing.T) {
 	Convey("Identifies the page rotation", t, func() {
-		raster := NewRasterizer("fixtures/rotated-sample.pdf")
+		raster := NewRasterizer("fixtures/rotated-sample.pdf", 1)
 		err := raster.Run()
 		So(err, ShouldBeNil)
 
@@ -77,7 +77,7 @@ func Test_scalePage(t *testing.T) {
 	Convey("Doing silly calculations on page rotation and scaling", t, func() {
 		Convey("handles landscape pages", func() {
 			Convey("as LandscapeScale when pages really are", func() {
-				raster := NewRasterizer("fixtures/landscape-sample.pdf")
+				raster := NewRasterizer("fixtures/landscape-sample.pdf", 1)
 				err := raster.Run()
 				So(err, ShouldBeNil)
 
@@ -90,7 +90,7 @@ func Test_scalePage(t *testing.T) {
 			})
 
 			Convey("as PortraitScale when pages were rotated", func() {
-				raster := NewRasterizer("fixtures/rotated-sample.pdf")
+				raster := NewRasterizer("fixtures/rotated-sample.pdf", 1)
 				err := raster.Run()
 				So(err, ShouldBeNil)
 				img, err := raster.GeneratePageImage(1, 0, 0)
@@ -103,7 +103,7 @@ func Test_scalePage(t *testing.T) {
 		})
 
 		Convey("handles portrait pages as PortraitScale", func() {
-			raster := NewRasterizer("fixtures/sample.pdf")
+			raster := NewRasterizer("fixtures/sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(1, 0, 0)
@@ -115,7 +115,7 @@ func Test_scalePage(t *testing.T) {
 		})
 
 		Convey("uses LandscapeScale if any page is landscape", func() {
-			raster := NewRasterizer("fixtures/mixed-sample.pdf")
+			raster := NewRasterizer("fixtures/mixed-sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 0, 0)
@@ -127,7 +127,7 @@ func Test_scalePage(t *testing.T) {
 		})
 
 		Convey("uses specified scale if there is one", func() {
-			raster := NewRasterizer("fixtures/mixed-sample.pdf")
+			raster := NewRasterizer("fixtures/mixed-sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(2, 0, 0.5)
@@ -143,7 +143,7 @@ func Test_scalePage(t *testing.T) {
 func Test_WithoutFileExtensions(t *testing.T) {
 	Convey("When the file has no file extension", t, func() {
 		Convey("but it is a PDF file, so it should work", func() {
-			raster := NewRasterizer("fixtures/sample_no_extension")
+			raster := NewRasterizer("fixtures/sample_no_extension", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
 
@@ -154,7 +154,7 @@ func Test_WithoutFileExtensions(t *testing.T) {
 		})
 
 		Convey("but it is hot garbage, so it should fail", func() {
-			raster := NewRasterizer("fixtures/bad_data")
+			raster := NewRasterizer("fixtures/bad_data", 1)
 			err := raster.Run()
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldContainSubstring, "Unable to open document")
@@ -170,7 +170,8 @@ func Test_WithoutFileExtensions(t *testing.T) {
 
 func Test_Processing(t *testing.T) {
 	Convey("When processing the file", t, func() {
-		raster := NewRasterizer("fixtures/sample.pdf")
+		// Allow up to 10 parallel requests
+		raster := NewRasterizer("fixtures/sample.pdf", 10)
 
 		Convey("returns an error when the rasterizer has not started", func() {
 			_, err := raster.GeneratePageImage(1, 1024, 0)
@@ -361,7 +362,7 @@ func Test_Processing(t *testing.T) {
 			raster.Stop()
 
 			// LANDSCAPE
-			raster = NewRasterizer("fixtures/landscape-sample.pdf")
+			raster = NewRasterizer("fixtures/landscape-sample.pdf", 1)
 			err = raster.Run()
 			So(err, ShouldBeNil)
 
