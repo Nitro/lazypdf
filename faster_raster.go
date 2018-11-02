@@ -153,7 +153,6 @@ func (r *Rasterizer) generatePage(pageNumber int, width int, scale float64, rast
 	select {
 	case response := <-replyChan:
 		close(replyChan)
-		replyChan = nil
 
 		err := response.Error()
 		if err != nil {
