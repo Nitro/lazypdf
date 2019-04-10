@@ -1,19 +1,19 @@
-#include <pdf.h>
-#include <pthread.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 // indent -linux -br -brf
 
-fz_context *cgo_fz_new_context(const fz_alloc_context * alloc,
-			       const fz_locks_context * locks,
-			       size_t max_store);
-int cgo_ptr_cast(ptrdiff_t ptr);
-fz_document *cgo_open_document(fz_context *ctx, const char *filename, const char *default_ext);
-fz_document *open_document_with_extension(fz_context *ctx, const char *filename, const char *default_ext);
-void cgo_drop_document(fz_context *ctx, fz_document *doc);
-void lock_mutex(void *locks, int lock_no);
-void unlock_mutex(void *locks, int lock_no);
-fz_locks_context *new_locks();
-void free_locks(fz_locks_context ** locks);
-int get_rotation(fz_context *ctx, fz_page *page);
-fz_page *load_page(fz_context *ctx, fz_document *doc, int number);
+#define DLL_EXPORT
+
+typedef void * document_handle;
+
+DLL_EXPORT document_handle open_document(const char* in_file);
+DLL_EXPORT void close_document(document_handle doc);
+
+DLL_EXPORT size_t get_num_pages(document_handle doc);
+
+// int here is return error code, 0 = sucess
+DLL_EXPORT int get_page_dimensions(document_handle doc, int32_t page, double zoom, uint32_t* width, uint32_t* height);
+
+// returns number of bytes copied in buffer
+DLL_EXPORT size_t render_page(document_handle doc, int32_t page, double zoom, char* buffer, size_t buf_len);
