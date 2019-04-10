@@ -13,7 +13,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// #include <faster_raster.h>
+/*
+#include <stdint.h>
+#include <stddef.h>
+#include <stdlib.h>
+typedef void* document_handle;
+__declspec(dllimport) document_handle open_document(const char* in_file);
+__declspec(dllimport) void close_document(document_handle doc);
+__declspec(dllimport) size_t get_num_pages(document_handle doc);
+__declspec(dllimport) int get_page_dimensions(document_handle doc, int32_t page, double zoom, uint32_t* width, uint32_t* height);
+__declspec(dllimport) size_t render_page(document_handle doc, int32_t page, double zoom, char* buffer, size_t buf_len);
+#cgo LDFLAGS: -L C:/build/Y_cmake_x64/bin/Release -ldpe_pdf_api
+*/
 import "C"
 
 const (
@@ -379,7 +390,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	}
 
 	bytes := make([]byte, 4*int(width)*int(height))
-	copiedBytes := C.render_page(r.Document, C.int(req.PageNumber-1), C.double(1), (*C.char)(unsafe.Pointer(&bytes[0])), C.ulong(len(bytes)))
+	copiedBytes := C.render_page(r.Document, C.int(req.PageNumber-1), C.double(1), (*C.char)(unsafe.Pointer(&bytes[0])), C.ulonglong(len(bytes)))
 	if int(copiedBytes) == 0 {
 		log.Warnf("Failed to render page %d", req.PageNumber)
 		req.sendErrorReply(r.Filename, ErrBadPage)

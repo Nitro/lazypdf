@@ -6,9 +6,8 @@ import (
 	"log"
 	"os"
 
-	"gopkg.in/alecthomas/kingpin.v2"
-
 	"github.com/Nitro/lazypdf"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 type rasterType int
