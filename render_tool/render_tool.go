@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"image/png"
 	"log"
 	"os"
@@ -54,7 +55,8 @@ func main() {
 		*out = *pdf + "." + *ext
 	}
 
-	raster := lazypdf.NewRasterizer(*pdf)
+	// We will rasterize one page only
+	raster := lazypdf.NewRasterizer(*pdf, 1)
 	err := raster.Run()
 	if err != nil {
 		log.Fatalf("Failed to initialize the rasteriser: %s", err)
@@ -62,7 +64,7 @@ func main() {
 
 	switch getRasterType(*ext) {
 	case RasterPNG:
-		img, err := raster.GeneratePageImage(*page, *size, *scale)
+		img, err := raster.GeneratePageImage(context.Background(), *page, *size, *scale)
 		if err != nil {
 			log.Fatalf("Raster error: %s", err)
 		}
@@ -75,7 +77,7 @@ func main() {
 		})
 
 	case RasterSVG:
-		svgData, err := raster.GeneratePageSVG(*page, *size, *scale)
+		svgData, err := raster.GeneratePageSVG(context.Background(), *page, *size, *scale)
 		if err != nil {
 			log.Fatalf("Raster error: %s", err)
 		}
