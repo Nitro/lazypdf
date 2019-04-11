@@ -397,10 +397,16 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		return
 	}
 
+	// Convert from BGRA to RBGA
+	imageBytes := make([]byte, len(bytes))
+	for i := 0; i < len(imageBytes); i += 4 {
+		imageBytes[i], imageBytes[i+2], imageBytes[i+1], imageBytes[i+3] = bytes[i+2], bytes[i], bytes[i+1], bytes[i+3]
+	}
+
 	goBounds := image.Rect(0, 0, int(width), int(height))
 
 	rgbaImage := &image.RGBA{
-		Pix: bytes, Stride: 4 * int(width), Rect: goBounds,
+		Pix: imageBytes, Stride: 4 * int(width), Rect: goBounds,
 	}
 
 	// r.backgroundRender(ctx, pixmap, list, bounds, &bbox, matrix, r.scaleFactor, bytes, req)
