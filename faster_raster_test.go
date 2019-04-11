@@ -171,7 +171,7 @@ func Test_WithoutFileExtensions(t *testing.T) {
 
 func Test_Processing(t *testing.T) {
 	Convey("When processing the file", t, func() {
-		// Allow up to 10 parallel requests
+		// Allow up to 10 buffered requests
 		raster := NewRasterizer("fixtures/sample.pdf", 10)
 
 		Convey("returns an error when the rasterizer has not started", func() {
@@ -213,13 +213,15 @@ func Test_Processing(t *testing.T) {
 			raster.Stop()
 		})
 
-		Convey("returns an error when the image raster request is cancelled", func() {
+		Convey("returns an error when the image raster request times out", func() {
 			err := raster.Run()
 			defer raster.Stop()
 			So(err, ShouldBeNil)
 
-			ctx, doneFunc := context.WithTimeout(context.Background(), 1*time.Millisecond)
-			defer doneFunc()
+			ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			// We don't really need to call this function, since we're always going to time
+			// out, but it's good practice to do so.
+			defer cancelFunc()
 
 			_, err = raster.GeneratePageImage(ctx, 2, 1024, 0)
 			So(err, ShouldEqual, ErrRasterTimeout)
