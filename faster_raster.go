@@ -31,8 +31,7 @@ const (
 	// We'll wait up to 10 seconds for a single page to Rasterize.
 	RasterTimeout = 10 * time.Second
 
-	LandscapeScale = 1.0
-	PortraitScale  = 1.5
+	PortraitScale = 1.5
 
 	DefaultWidth = 920
 )
@@ -397,7 +396,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	}
 
 	// Recompute the width and height using the updated scale
-	requiredScale := float64(width) / float64(desiredWidth)
+	requiredScale := (float64(desiredWidth) * PortraitScale) / float64(width)
 	ret = C.get_page_dimensions(r.Document, C.int(req.PageNumber-1), C.double(requiredScale), &width, &height)
 	if int(ret) > 0 {
 		log.Warnf("Failed to get dimensions for page %d with code %d", req.PageNumber, int(ret))
