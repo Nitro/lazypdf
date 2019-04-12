@@ -33,6 +33,8 @@ const (
 
 	LandscapeScale = 1.0
 	PortraitScale  = 1.5
+
+	DefaultWidth = 920
 )
 
 type rasterType int
@@ -380,17 +382,33 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 		return
 	}
 
-	var width C.uint
-	var height C.uint
-	ret := C.get_page_dimensions(r.Document, C.int(req.PageNumber-1), C.double(1), &width, &height)
+	// Get dimensions with PortraitScale scale
+	var width, height C.uint
+	ret := C.get_page_dimensions(r.Document, C.int(req.PageNumber-1), C.double(PortraitScale), &width, &height)
 	if int(ret) > 0 {
 		log.Warnf("Failed to get dimensions for page %d with code %d", req.PageNumber, int(ret))
 		req.sendErrorReply(r.Filename, ErrBadPage)
 		return
 	}
 
+	desiredWidth := DefaultWidth
+	if req.Width > 0 {
+		desiredWidth = req.Width
+	}
+
+	// Recompute the width and height using the updated scale
+	requiredScale := float64(width) / float64(desiredWidth)
+	ret = C.get_page_dimensions(r.Document, C.int(req.PageNumber-1), C.double(requiredScale), &width, &height)
+	if int(ret) > 0 {
+		log.Warnf("Failed to get dimensions for page %d with code %d", req.PageNumber, int(ret))
+		req.sendErrorReply(r.Filename, ErrBadPage)
+		return
+	}
+
+	// TODO: Readjust the scale if the document contains landscape pages
+
 	bytes := make([]byte, 4*int(width)*int(height))
-	copiedBytes := C.render_page(r.Document, C.int(req.PageNumber-1), C.double(1), (*C.char)(unsafe.Pointer(&bytes[0])), C.ulonglong(len(bytes)))
+	copiedBytes := C.render_page(r.Document, C.int(req.PageNumber-1), C.double(requiredScale), (*C.char)(unsafe.Pointer(&bytes[0])), C.ulonglong(len(bytes)))
 	if int(copiedBytes) == 0 {
 		log.Warnf("Failed to render page %d", req.PageNumber)
 		req.sendErrorReply(r.Filename, ErrBadPage)
