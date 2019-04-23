@@ -115,14 +115,14 @@ func Test_scalePage(t *testing.T) {
 			raster.Stop()
 		})
 
-		Convey("uses LandscapeScale if any page is landscape", func() {
+		Convey("uses PortraitScale if any page is landscape", func() {
 			raster := NewRasterizer("fixtures/mixed-sample.pdf", 1)
 			err := raster.Run()
 			So(err, ShouldBeNil)
 			img, err := raster.GeneratePageImage(context.Background(), 2, 0, 0)
 
 			So(err, ShouldBeNil)
-			So(img.Bounds().Max.X, ShouldEqual, 612)
+			So(img.Bounds().Max.X, ShouldEqual, 918)
 
 			raster.Stop()
 		})

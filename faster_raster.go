@@ -103,7 +103,6 @@ type Rasterizer struct {
 	Document           *C.struct_fz_document_s
 	hasRun             bool
 	locks              *C.fz_locks_context
-	scaleFactor        float64
 	docPageCount       int
 	quitChan           chan struct{}
 	backgroundRenderWg sync.WaitGroup
@@ -362,27 +361,6 @@ func (r *Rasterizer) scalePage(page *C.fz_page, bounds *C.fz_rect, req *RasterRe
 	return PortraitScale
 }
 
-// calculateScaleForDocument goes through all the bounding boxes of all the pages
-// in the document and tries to figure out if any of them are landscape pages. If
-// so, it will default to LandscapeScale.
-func (r *Rasterizer) calculateScaleForDocument(pageCount int) {
-	var page *C.fz_page
-	for i := 0; i < pageCount; i++ {
-		page = C.load_page(r.Ctx, r.Document, C.int(i))
-		if page == nil {
-			continue
-		}
-
-		bounds := C.fz_bound_page(r.Ctx, page)
-		r.scaleFactor = r.scalePage(page, &bounds, nil)
-		C.fz_drop_page(r.Ctx, page)
-
-		if r.scaleFactor == LandscapeScale {
-			break
-		}
-	}
-}
-
 func (req *RasterRequest) sendErrorReply(filename string, err error) {
 	select {
 	case req.ReplyChan <- &RasterReply{err: err}:
@@ -466,16 +444,10 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 
 	bounds := C.fz_bound_page(ctx, page)
 
-	// If we haven't already scaled this thing, and the request doesn't specify
-	// then let's scale it for the whole doc.
-	if r.scaleFactor == 0 && req.Width == 0 && req.Scale == 0 {
-		r.calculateScaleForDocument(r.docPageCount)
-	} else {
-		// Do the logic to figure out how we scale this thing.
-		r.scaleFactor = r.scalePage(page, &bounds, req)
-	}
+	// Do the logic to figure out how we scale this thing.
+	scaleFactor := r.scalePage(page, &bounds, req)
 
-	matrix := C.fz_scale(C.float(r.scaleFactor), C.float(r.scaleFactor))
+	matrix := C.fz_scale(C.float(scaleFactor), C.float(scaleFactor))
 
 	bounds = C.fz_transform_rect(bounds, matrix)
 	bbox := C.fz_round_rect(bounds)
@@ -522,7 +494,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	// The rest we can background and let the main loop return to processing
 	// any additional pages that have been requested!
 	r.backgroundRenderWg.Add(1)
-	go r.backgroundRender(ctx, pixmap, list, bounds, &bbox, matrix, r.scaleFactor, bytes, req)
+	go r.backgroundRender(ctx, pixmap, list, bounds, &bbox, matrix, scaleFactor, bytes, req)
 }
 
 // renderToSVG renders the requested page to an SVG string
