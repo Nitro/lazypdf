@@ -1,5 +1,8 @@
 #!/bin/bash -e
 
+# Elevate execution privilege.
+[ "$UID" -eq 0 ] || exec sudo bash "$0" "$@"
+
 if [ ! -z ${SHALLOW_CLONE} ]; then
 	# Can't use --shallow-submodules because some bug in either Git or in the
 	# mupdf submodule setup makes the clone command fail.
@@ -8,20 +11,13 @@ fi
 
 MUPDF_VERSION="1.16.1"
 
-if [[ ! -d mupdf ]]; then
+if [[ ! -d /opt/mupdf ]]; then
 	echo "Downloading muPDF..."
 	# Setting -j0 clones submodules with as many parallel jobs as possible
-	git clone --branch ${MUPDF_VERSION} ${SHALLOW_CLONE} --recurse-submodules=thirdparty -j0 https://github.com/ArtifexSoftware/mupdf.git
+	git clone --branch ${MUPDF_VERSION} ${SHALLOW_CLONE} --recurse-submodules=thirdparty -j0 https://github.com/ArtifexSoftware/mupdf.git /opt/mupdf
 fi
 
 echo "Building muPDF..."
 # Pass -j to build using as many cores as possible
-(cd mupdf; XCFLAGS="-g" make -j libs)
-
-# Newer OSX needs an include path for OpenSSL
-if [[ `uname -s` == "Darwin" ]]; then
-	export CGO_LDFLAGS="-L/usr/local/opt/openssl/lib"
-fi
-
-echo "Fetching Go dependencies and compiling code..."
-go get -t ./...
+(cd /opt/mupdf; XCFLAGS="-g" make -j libs)
+echo $MUPDF_VERSION >> /opt/mupdf/version
