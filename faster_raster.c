@@ -1,10 +1,6 @@
 #include "faster_raster.h"
-
 #include <stdio.h>
 #include <string.h>
-
-// Format with:
-// indent -linux -br -brf
 
 // Have to wrap this macro so we can call from Cgo
 fz_context *cgo_fz_new_context(const fz_alloc_context * alloc,

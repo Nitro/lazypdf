@@ -2,11 +2,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-// indent -linux -br -brf
-
-fz_context *cgo_fz_new_context(const fz_alloc_context * alloc,
-			       const fz_locks_context * locks,
-			       size_t max_store);
+fz_context *cgo_fz_new_context(const fz_alloc_context * alloc, const fz_locks_context * locks, size_t max_store);
 int cgo_ptr_cast(ptrdiff_t ptr);
 fz_document *cgo_open_document(fz_context *ctx, const char *filename, const char *default_ext);
 fz_document *open_document_with_extension(fz_context *ctx, const char *filename, const char *default_ext);

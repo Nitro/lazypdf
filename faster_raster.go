@@ -1,5 +1,5 @@
-// Package lazypdf provides a MuPDF-based document page rasterizer. It is managed
-// via the Rasterizer struct.
+// Package lazypdf provides a MuPDF-based document page rasterizer. It is managed via the Rasterizer
+// struct.
 package lazypdf
 
 import (
@@ -14,17 +14,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// #cgo CFLAGS: -I/opt/mupdf/include
-// #cgo CFLAGS: -I/opt/mupdf/include/mupdf
-// #cgo CFLAGS: -I/opt/mupdf/thirdparty/openjpeg
-// #cgo CFLAGS: -I/opt/mupdf/thirdparty/jbig2dec
-// #cgo CFLAGS: -I/opt/mupdf/thirdparty/zlib
-// #cgo CFLAGS: -I/opt/mupdf/thirdparty/jpeg
-// #cgo CFLAGS: -I/opt/mupdf/thirdparty/freetype
-//
-// #cgo LDFLAGS: -L/opt/mupdf/build/release -lmupdf -lmupdf-third -lm -lcrypto -lpthread
-// #cgo darwin LDFLAGS: -L/usr/local/opt/openssl/lib
-//
+// #cgo CFLAGS: -I/usr/local/include
+// #cgo CFLAGS: -I/usr/local/include/mupdf
+// #cgo LDFLAGS: -L/usr/local/lib -lmupdf -lmupdf-third
 // #include <faster_raster.h>
 import "C"
 

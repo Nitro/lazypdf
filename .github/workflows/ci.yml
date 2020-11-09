@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 1
 
       - name: Install mupdf
-        run: SHALLOW_CLONE=true ./build
+        run: make install-mupdf
 
       - name: Test
         run: go test -v -race --timeout 1m
