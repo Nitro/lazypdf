@@ -475,7 +475,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 
 	err := req.runCancellableOperation(r.Filename,
 		func(cookie *C.fz_cookie) {
-			C.fz_run_page(ctx, page, device, C.fz_identity, cookie)
+			C.fz_run_page_contents(ctx, page, device, C.fz_identity, cookie)
 		},
 	)
 	C.fz_close_device(ctx, device)
@@ -531,7 +531,7 @@ func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bo
 
 	err := req.runCancellableOperation(r.Filename,
 		func(cookie *C.fz_cookie) {
-			C.fz_run_page(ctx, page, device, C.fz_identity, cookie)
+			C.fz_run_page_contents(ctx, page, device, C.fz_identity, cookie)
 		},
 	)
 
