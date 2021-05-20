@@ -7,11 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"sync"
 	"time"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 )
 
 // #cgo CFLAGS: -I/opt/mupdf/include
@@ -73,6 +74,7 @@ type RasterRequest struct {
 	Scale      float64
 	RasterType rasterType
 	ReplyChan  chan ReplyWrapper
+	Logger     zerolog.Logger
 }
 
 type RasterReply struct {
@@ -110,6 +112,7 @@ type Rasterizer struct {
 	RequestChan        chan *RasterRequest
 	Ctx                *C.struct_fz_context_s
 	Document           *C.struct_fz_document_s
+	Logger             zerolog.Logger
 	hasRun             bool
 	locks              *C.fz_locks_context
 	docPageCount       int
@@ -126,6 +129,17 @@ func NewRasterizer(filename string, rasterBufferSize int) *Rasterizer {
 		Filename:    filename,
 		RequestChan: make(chan *RasterRequest, rasterBufferSize),
 		quitChan:    make(chan struct{}),
+		Logger:      zerolog.New(io.Discard).Level(zerolog.Disabled),
+	}
+}
+
+// NewRasterizerWithLogger same as NewRasterizer but this function also accepts a logger.
+func NewRasterizerWithLogger(filename string, rasterBufferSize int, logger zerolog.Logger) *Rasterizer {
+	return &Rasterizer{
+		Filename:    filename,
+		RequestChan: make(chan *RasterRequest, rasterBufferSize),
+		quitChan:    make(chan struct{}),
+		Logger:      logger,
 	}
 }
 
@@ -162,6 +176,7 @@ func (r *Rasterizer) generatePage(ctx context.Context, pageNumber int, width int
 		Scale:      scale,
 		RasterType: rasterType,
 		ReplyChan:  replyChan,
+		Logger:     r.Logger,
 	}
 	select {
 	// Try to send the request to the event loop
@@ -375,7 +390,7 @@ func (req *RasterRequest) sendErrorReply(filename string, err error) {
 	case req.ReplyChan <- &RasterReply{err: err}:
 		// nothing
 	default:
-		log.Warnf("Failed to send reply for %q page %d", filename, req.PageNumber)
+		req.Logger.Warn().Msgf("Failed to send reply for %q page %d", filename, req.PageNumber)
 	}
 }
 
@@ -407,7 +422,7 @@ func (req *RasterRequest) runCancellableOperation(filename string, fn func(*C.fz
 	close(done)
 
 	if err := req.ctx.Err(); err != nil || cookie.errors > 0 {
-		log.Infof("Operation cancelled upstream: %s", err)
+		req.Logger.Info().Msgf("Operation cancelled upstream: %s", err)
 		req.sendErrorReply(filename, ErrBadPage)
 		return ErrBadPage
 	}
@@ -427,7 +442,7 @@ func (r *Rasterizer) processOne(req *RasterRequest) {
 	}
 
 	if req.PageNumber < 1 || req.PageNumber > r.docPageCount {
-		log.Warnf("Requested invalid page %d out of total page count %d from file %q", req.PageNumber, r.docPageCount, r.Filename)
+		r.Logger.Warn().Msgf("Requested invalid page %d out of total page count %d from file %q", req.PageNumber, r.docPageCount, r.Filename)
 		req.sendErrorReply(r.Filename, ErrBadPage)
 		return
 	}
@@ -557,7 +572,7 @@ func (r *Rasterizer) renderToSVG(ctx *C.struct_fz_context_s, page *C.fz_page, bo
 	case req.ReplyChan <- &RasterSVGReply{SVG: svgBytes}:
 		//nothing
 	default:
-		log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
+		r.Logger.Warn().Msgf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
 	}
 }
 
@@ -602,7 +617,7 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 		return
 	}
 
-	log.Debugf("Pixmap w: %d, h: %d, scale: %.2f", pixmap.w, pixmap.h, scaleFactor)
+	r.Logger.Debug().Msgf("Pixmap w: %d, h: %d, scale: %.2f", pixmap.w, pixmap.h, scaleFactor)
 
 	goBounds := image.Rect(int(bbox.x0), int(bbox.y0), int(bbox.x1), int(bbox.y1))
 	rgbaImage := &image.RGBA{
@@ -614,6 +629,6 @@ func (r *Rasterizer) backgroundRender(ctx *C.struct_fz_context_s,
 	case req.ReplyChan <- &RasterImageReply{Image: rgbaImage}:
 		//nothing
 	default:
-		log.Warnf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
+		r.Logger.Warn().Msgf("Failed to reply for %s, page %d", r.Filename, req.PageNumber)
 	}
 }
