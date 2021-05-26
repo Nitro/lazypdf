@@ -1,3 +1,5 @@
-*.swp
-*.swo
-render_tool/render_tool
+# OS
+.DS_Store
+
+# Editor
+/.vscode

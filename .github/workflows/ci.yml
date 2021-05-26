@@ -1,21 +1,52 @@
-on: push
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+
 name: CI
 jobs:
   quality:
     name: Quality
-    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Install Go
-        uses: actions/setup-go@v2
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v1
         with:
-          go-version: 1.16
+          languages: go
 
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install mupdf
-        run: SHALLOW_CLONE=true ./build
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Dependency linter
+        run: |
+          go mod tidy
+          git add .
+          git diff --cached --exit-code
+
+      - name: Build
+        run: go build .
 
       - name: Test
-        run: go test -v -race --timeout 1m
+        run: |
+          go get github.com/mfridman/tparse
+          go test -race -cover -covermode=atomic -json | tparse -all
+          go test -race -bench .
+
+      - name: Go golangci-lint
+        run: |
+          go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
+          golangci-lint run -c misc/golangci/config.yml ./...
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v1

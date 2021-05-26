@@ -1,21 +1,20 @@
-LazyPDF
-=======
+# LazyPDF
+This is a rasterizing engine for PDF documents built around [MuPDF][mupdf]. Works on Linux and macOS.
+<a target="_blank" href="https://icons8.com/icon/43610/copy">
+  <img src="misc/assets/icon.png" align="right" height="96px" width="96px" />
+</a>
 
-[![](https://travis-ci.org/Nitro/lazypdf.svg?branch=master)](https://travis-ci.org/Nitro/lazypdf)
+## Building
+```golang
+go build
+```
 
-This is a rasterizing engine for PDF documents, built around MuPDF. It exports
-a Go interface that allows the creation of a `Rasterizer` for each document you
-wish to be able to rasterize to images.  It generated Go `image.Image`s and you
-can then render these as PNG/JPEG/etc by using the Go stdlib functions for
-doing that (`image/jpeg`, `image/png`).
+## Testing
+```golang
+go test -race
+```
 
-Building
---------
+## Updating MuPDF library
+To update MuPDF library simply change its version at [misc/mupdf/version](misc/mupdf/version) and submit the change at a pull request. GitHub Actions will then trigger the process of updating the library and headers through a series of commits at the pull request branch.
 
-You can simply run `./build` and the shell script will do all the right things
-on either Linux or OSX.
-
-Installing
-----------
-
-The only requirement is to build first MuPDF with the `./build` script.
+[mupdf]: https://mupdf.com
