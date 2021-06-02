@@ -2,6 +2,35 @@
 #include "main.h"
 #include "_cgo_export.h"
 
+int page_count(const unsigned char *payload, size_t payload_length) {
+	fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
+	if (!ctx) {
+		errorHandler("fail to create mupdf context");
+		return -1;
+	}
+
+	int exit = 0;
+	int page_count = 0;
+	fz_stream *stream = NULL;
+	fz_document *doc = NULL;
+	fz_try(ctx) {
+		fz_register_document_handlers(ctx);
+		stream = fz_open_memory(ctx, payload, payload_length);
+		doc = fz_open_document_with_stream(ctx, "document.pdf", stream);
+		page_count = fz_count_pages(ctx, doc);
+	} fz_catch(ctx) {
+		errorHandler(fz_caught_message(ctx));
+		exit = 1;
+	}
+
+	fz_drop_document(ctx, doc);
+	fz_drop_context(ctx);
+	if (exit == 1) {
+		return -1;
+	}
+	return page_count;
+}
+
 result *save_to_png(int page_number, int width, float scale, const unsigned char *payload, size_t payload_length) {
 	fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
 	if (!ctx) {
