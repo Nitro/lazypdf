@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClientSaveToPNGOK(t *testing.T) {
+func TestSaveToPNGOK(t *testing.T) {
 	for i := uint16(0); i < 13; i++ {
 		file, err := os.Open("testdata/sample.pdf")
 		require.NoError(t, err)
