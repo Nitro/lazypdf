@@ -24,6 +24,7 @@ int page_count(const unsigned char *payload, size_t payload_length) {
 	}
 
 	fz_drop_document(ctx, doc);
+	fz_drop_stream(ctx, stream);
 	fz_drop_context(ctx);
 	if (exit == 1) {
 		return -1;
