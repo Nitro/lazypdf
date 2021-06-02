@@ -15,11 +15,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v1
-        with:
-          languages: go
-
       - name: Checkout code
         uses: actions/checkout@v2
 
@@ -49,6 +44,3 @@ jobs:
         run: |
           go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
           golangci-lint run -c misc/golangci/config.yml ./...
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v1
