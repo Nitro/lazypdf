@@ -39,6 +39,25 @@ func TestSaveToPNGFail(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestPageCount(t *testing.T) {
+	file, err := os.Open("testdata/sample.pdf")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	count, err := PageCount(context.Background(), file)
+	require.NoError(t, err)
+	require.Equal(t, 13, count)
+}
+
+func TestPageCountFail(t *testing.T) {
+	file, err := os.Open("testdata/sample-invalid.pdf")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	_, err = PageCount(context.Background(), file)
+	require.Error(t, err)
+}
+
 func BenchmarkSaveToPNGPage0(b *testing.B)  { benchmarkSaveToPNGRunner(0, b) }
 func BenchmarkSaveToPNGPage1(b *testing.B)  { benchmarkSaveToPNGRunner(1, b) }
 func BenchmarkSaveToPNGPage2(b *testing.B)  { benchmarkSaveToPNGRunner(2, b) }

@@ -12,6 +12,7 @@ typedef struct {
 	const char *data;
 } result;
 
+int page_count(const unsigned char *payload, size_t payload_length);
 result *save_to_png(int page_number, int width, float scale, const unsigned char *payload, size_t payload_length);
 void drop_result(result *r);
 

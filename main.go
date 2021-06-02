@@ -66,6 +66,36 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 	return nil
 }
 
+// PageCount is used to return the page count of the document.
+func PageCount(ctx context.Context, rawPayload io.Reader) (int, error) {
+	span, ctx := ddTracer.StartSpanFromContext(ctx, "lazypdf.PageCount")
+	defer span.Finish()
+
+	if rawPayload == nil {
+		return 0, errors.New("payload can't be nil")
+	}
+
+	t1 := time.Now()
+	mutex.Lock()
+	span.SetTag("LockContention", time.Since(t1))
+	defer mutex.Unlock()
+
+	payload, err := io.ReadAll(rawPayload)
+	if err != nil {
+		return 0, fmt.Errorf("fail to read the payload: %w", err)
+	}
+	payloadPointer := C.CBytes(payload)
+	defer C.free(payloadPointer)
+
+	baseCtx, baseCtxCancel = context.WithCancel(ctx)
+	result := C.page_count((*C.uchar)(payloadPointer), C.size_t(len(payload)))
+	if baseCtx.Err() != nil {
+		return 0, errors.New(cancelationReason)
+	}
+
+	return int(result), nil
+}
+
 //export errorHandler
 func errorHandler(message *C.cchar) {
 	baseCtxCancel()
