@@ -30,7 +30,7 @@ var (
 
 // SaveToPNG is used to convert a page from a PDF file to PNG.
 func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayload io.Reader, output io.Writer) error {
-	span, ctx := ddTracer.StartSpanFromContext(ctx, "Client.SaveToPNG")
+	span, ctx := ddTracer.StartSpanFromContext(ctx, "lazypdf.SaveToPNG")
 	defer span.Finish()
 
 	if rawPayload == nil {
