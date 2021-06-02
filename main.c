@@ -28,12 +28,14 @@ result *save_to_png(int page_number, int width, float scale, const unsigned char
 		doc = fz_open_document_with_stream(ctx, "document.pdf", stream);
 		page = fz_load_page(ctx, doc, page_number);
 
-		float scale_factor = 1;
+		float scale_factor = 1.5;
 		fz_rect bounds = fz_bound_page(ctx, page);
 		if (width != 0) {
 			scale_factor = width / bounds.x1;
 		} else if (scale != 0) {
 			scale_factor = scale;
+		} else if ((bounds.x1 - bounds.x0) > (bounds.y1 - bounds.y0)) {
+			scale_factor = 1;
 		}
 
 		fz_matrix ctm = fz_scale(scale_factor, scale_factor);
