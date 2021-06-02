@@ -12,8 +12,9 @@ require (
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/tinylib/msgp v1.1.5 // indirect
-	golang.org/x/sys v0.0.0-20210525143221-35b2ab0089ea // indirect
+	golang.org/x/sys v0.0.0-20210601080250-7ecdf8ef093b // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba // indirect
-	gopkg.in/DataDog/dd-trace-go.v1 v1.31.0
+	google.golang.org/protobuf v1.26.0 // indirect
+	gopkg.in/DataDog/dd-trace-go.v1 v1.31.1
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 )
