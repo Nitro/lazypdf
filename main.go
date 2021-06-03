@@ -13,20 +13,39 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
-	"time"
+	"unsafe"
 
+	"github.com/google/uuid"
 	ddTracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 // Global state to interact with C.
 // nolint: gochecknoglobals
 var (
-	baseCtx           context.Context
-	baseCtxCancel     func()
-	cancelationReason string
-	mutex             sync.Mutex
+	saveToPNGState map[string]saveToPNGOutput
+	saveToPNGMutex sync.Mutex
+	pageCountState map[string]pageCountOutput
+	pageCountMutex sync.Mutex
 )
+
+type saveToPNGOutput struct {
+	chanResult chan []byte
+	chanError  chan error
+}
+
+type pageCountOutput struct {
+	chanResult chan int
+	chanError  chan error
+}
+
+// nolint: gochecknoinits
+func init() {
+	saveToPNGState = make(map[string]saveToPNGOutput)
+	pageCountState = make(map[string]pageCountOutput)
+	C.init_state(C.ulong(runtime.NumCPU()))
+}
 
 // SaveToPNG is used to convert a page from a PDF file to PNG.
 func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayload io.Reader, output io.Writer) error {
@@ -40,11 +59,6 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 		return errors.New("output can't be nil")
 	}
 
-	t1 := time.Now()
-	mutex.Lock()
-	span.SetTag("LockContention", time.Since(t1))
-	defer mutex.Unlock()
-
 	payload, err := io.ReadAll(rawPayload)
 	if err != nil {
 		return fmt.Errorf("fail to read the payload: %w", err)
@@ -52,17 +66,37 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 	payloadPointer := C.CBytes(payload)
 	defer C.free(payloadPointer)
 
-	baseCtx, baseCtxCancel = context.WithCancel(ctx)
-	result := C.save_to_png(C.int(page), C.int(width), C.float(scale), (*C.uchar)(payloadPointer), C.size_t(len(payload)))
-	if baseCtx.Err() != nil {
-		return errors.New(cancelationReason)
-	}
-	defer C.drop_result(result)
+	id := uuid.New().String()
+	cgoID := C.CString(id)
+	defer C.free(unsafe.Pointer(cgoID))
 
-	png := C.GoStringN(result.data, C.int(result.len))
-	if _, err = output.Write([]byte(png)); err != nil {
-		return fmt.Errorf("fail to write the result at the output: %w", err)
+	input := C.SaveToPNGInput{
+		id:             cgoID,
+		page:           C.int(page),
+		width:          C.int(width),
+		scale:          C.float(scale),
+		payload:        (*C.uchar)(payloadPointer),
+		payload_length: C.size_t(len(payload)),
 	}
+
+	saveToPNGMutex.Lock()
+	out := saveToPNGOutput{chanResult: make(chan []byte), chanError: make(chan error)}
+	saveToPNGState[id] = out
+	defer cleanSaveToPNGState(id)
+	saveToPNGMutex.Unlock()
+	C.save_to_png(&input) // nolint: gocritic
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-out.chanError:
+		return err
+	case payload := <-out.chanResult:
+		if _, err = output.Write(payload); err != nil {
+			return fmt.Errorf("fail to write the result at the output: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -75,11 +109,6 @@ func PageCount(ctx context.Context, rawPayload io.Reader) (int, error) {
 		return 0, errors.New("payload can't be nil")
 	}
 
-	t1 := time.Now()
-	mutex.Lock()
-	span.SetTag("LockContention", time.Since(t1))
-	defer mutex.Unlock()
-
 	payload, err := io.ReadAll(rawPayload)
 	if err != nil {
 		return 0, fmt.Errorf("fail to read the payload: %w", err)
@@ -87,17 +116,72 @@ func PageCount(ctx context.Context, rawPayload io.Reader) (int, error) {
 	payloadPointer := C.CBytes(payload)
 	defer C.free(payloadPointer)
 
-	baseCtx, baseCtxCancel = context.WithCancel(ctx)
-	result := C.page_count((*C.uchar)(payloadPointer), C.size_t(len(payload)))
-	if baseCtx.Err() != nil {
-		return 0, errors.New(cancelationReason)
+	id := uuid.New().String()
+	cgoID := C.CString(id)
+	defer C.free(unsafe.Pointer(cgoID))
+
+	input := C.PageCountInput{
+		id:             cgoID,
+		payload:        (*C.uchar)(payloadPointer),
+		payload_length: C.size_t(len(payload)),
 	}
 
-	return int(result), nil
+	pageCountMutex.Lock()
+	out := pageCountOutput{chanResult: make(chan int), chanError: make(chan error)}
+	pageCountState[id] = out
+	defer cleanPageCountState(id)
+	pageCountMutex.Unlock()
+	C.page_count(&input) // nolint: gocritic
+
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case err := <-out.chanError:
+		return 0, err
+	case count := <-out.chanResult:
+		return count, nil
+	}
 }
 
-//export errorHandler
-func errorHandler(message *C.cchar) {
-	baseCtxCancel()
-	cancelationReason = C.GoString(message)
+//export callbackSaveToPNGOutput
+func callbackSaveToPNGOutput(output *C.SaveToPNGOutput) {
+	saveToPNGMutex.Lock()
+	defer saveToPNGMutex.Unlock()
+
+	id := C.GoString(output.id)
+	if output.error != nil {
+		saveToPNGState[id].chanError <- errors.New(C.GoString(output.error))
+		return
+	}
+	saveToPNGState[id].chanResult <- []byte(C.GoStringN(output.data, C.int(output.len)))
+}
+
+func cleanSaveToPNGState(id string) {
+	saveToPNGMutex.Lock()
+	delete(saveToPNGState, id)
+	saveToPNGMutex.Unlock()
+}
+
+//export callbackPageCountOutput
+func callbackPageCountOutput(output *C.PageCountOutput) {
+	pageCountMutex.Lock()
+	defer pageCountMutex.Unlock()
+
+	id := C.GoString(output.id)
+	if output.error != nil {
+		pageCountState[id].chanError <- errors.New(C.GoString(output.error))
+		return
+	}
+	pageCountState[id].chanResult <- int(output.count)
+}
+
+func cleanPageCountState(id string) {
+	pageCountMutex.Lock()
+	delete(pageCountState, id)
+	pageCountMutex.Unlock()
+}
+
+//export fatal
+func fatal(msg *C.char) {
+	panic(C.GoString(msg))
 }

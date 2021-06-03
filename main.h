@@ -1,19 +1,39 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+#include <pthread.h>
 #include "pdf.h"
 
-typedef const char cchar;
+typedef struct {
+	char *id;
+	int page;
+	int width;
+	float scale;
+	const unsigned char *payload;
+	size_t payload_length;
+} SaveToPNGInput;
 
 typedef struct {
-	fz_context *context;
-	fz_buffer *buffer;
+	char *id;
+	char *data;
 	size_t len;
-	const char *data;
-} result;
+	const char *error;
+} SaveToPNGOutput;
 
-int page_count(const unsigned char *payload, size_t payload_length);
-result *save_to_png(int page_number, int width, float scale, const unsigned char *payload, size_t payload_length);
-void drop_result(result *r);
+typedef struct {
+	char *id;
+	const unsigned char *payload;
+	size_t payload_length;
+} PageCountInput;
+
+typedef struct {
+	char *id;
+	int count;
+	const char *error;
+} PageCountOutput;
+
+void init_state(size_t lock_quantity);
+void page_count(PageCountInput *input);
+void save_to_png(SaveToPNGInput *input);
 
 #endif

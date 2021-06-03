@@ -1,49 +1,78 @@
-#include <string.h>
 #include "main.h"
 #include "_cgo_export.h"
 
-int page_count(const unsigned char *payload, size_t payload_length) {
-	fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
-	if (!ctx) {
-		errorHandler("fail to create mupdf context");
-		return -1;
+typedef struct {
+	fz_context *ctx;
+	fz_locks_context *locks;
+	pthread_mutex_t *mutex;
+} State;
+
+State *state;
+
+void lock_mutex(void *user, int lock) {
+	pthread_mutex_t *mutex = (pthread_mutex_t *) user;
+	if (pthread_mutex_lock(&mutex[lock]) != 0) {
+		fatal("fail to lock mutex");
+	}
+}
+
+void unlock_mutex(void *user, int lock) {
+	pthread_mutex_t *mutex = (pthread_mutex_t *) user;
+	if (pthread_mutex_unlock(&mutex[lock]) != 0) {
+		fatal("fail to unlock mutex");
+	}
+}
+
+void init_state(size_t lock_quantity) {
+	pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t)*lock_quantity);
+	fz_locks_context *locks = malloc(sizeof(fz_locks_context));
+	locks->user = mutex;
+	locks->lock = lock_mutex;
+	locks->unlock = unlock_mutex;
+
+	for (int i = 0; i < lock_quantity; i++) {
+		if (pthread_mutex_init(&mutex[i], NULL) != 0) {
+			fatal("fail to initialize mutex");
+		}
 	}
 
-	int exit = 0;
-	int page_count = 0;
+	state = malloc(sizeof(State));
+	state->mutex = mutex;
+	state->locks = locks;
+	state->ctx = fz_new_context(NULL, state->locks, FZ_STORE_UNLIMITED);
+	fz_register_document_handlers(state->ctx);
+}
+
+void *page_count_runner(void *args) {
+	PageCountInput *input = args;
+	PageCountOutput output = { .id = input->id, .count = 0, .error = NULL };
+	fz_context *ctx = fz_clone_context(state->ctx);
 	fz_stream *stream = NULL;
 	fz_document *doc = NULL;
 	fz_try(ctx) {
-		fz_register_document_handlers(ctx);
-		stream = fz_open_memory(ctx, payload, payload_length);
+		stream = fz_open_memory(ctx, input->payload, input->payload_length);
 		doc = fz_open_document_with_stream(ctx, "document.pdf", stream);
-		page_count = fz_count_pages(ctx, doc);
+		output.count = fz_count_pages(ctx, doc);
 	} fz_catch(ctx) {
-		errorHandler(fz_caught_message(ctx));
-		exit = 1;
+		output.error = fz_caught_message(ctx);
 	}
 
+	callbackPageCountOutput(&output);
 	fz_drop_document(ctx, doc);
 	fz_drop_stream(ctx, stream);
 	fz_drop_context(ctx);
-	if (exit == 1) {
-		return -1;
-	}
-	return page_count;
+	return NULL;
 }
 
-result *save_to_png(int page_number, int width, float scale, const unsigned char *payload, size_t payload_length) {
-	fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
-	if (!ctx) {
-		errorHandler("fail to create mupdf context");
-		return NULL;
-	}
+void page_count(PageCountInput *input) {
+	pthread_t thread;
+	pthread_create(&thread, NULL, page_count_runner, input);
+}
 
-	result *r = malloc(sizeof(result));
-	r->context = ctx;
-	r->buffer = NULL;
-
-	int exit = 0;
+void *save_to_png_runner(void *args) {
+	SaveToPNGInput *input = args;
+	SaveToPNGOutput output = { .id = input->id, .data = NULL, .len = 0, .error = NULL};
+	fz_context *ctx = fz_clone_context(state->ctx);
 	fz_stream *stream = NULL;
 	fz_document *doc = NULL;
 	fz_page *page = NULL;
@@ -53,17 +82,16 @@ result *save_to_png(int page_number, int width, float scale, const unsigned char
 	fz_device *draw_device = NULL;
 	fz_buffer *buffer = NULL;
 	fz_try(ctx) {
-		fz_register_document_handlers(ctx);
-		stream = fz_open_memory(ctx, payload, payload_length);
+		stream = fz_open_memory(ctx, input->payload, input->payload_length);
 		doc = fz_open_document_with_stream(ctx, "document.pdf", stream);
-		page = fz_load_page(ctx, doc, page_number);
+		page = fz_load_page(ctx, doc, input->page);
 
 		float scale_factor = 1.5;
 		fz_rect bounds = fz_bound_page(ctx, page);
-		if (width != 0) {
-			scale_factor = width / bounds.x1;
-		} else if (scale != 0) {
-			scale_factor = scale;
+		if (input->width != 0) {
+			scale_factor = input->width / bounds.x1;
+		} else if (input->scale != 0) {
+			scale_factor = input->scale;
 		} else if ((bounds.x1 - bounds.x0) > (bounds.y1 - bounds.y0)) {
 			scale_factor = 1;
 		}
@@ -79,24 +107,19 @@ result *save_to_png(int page_number, int width, float scale, const unsigned char
 		draw_device = fz_new_draw_device(ctx, ctm, pixmap);
 		fz_run_display_list(ctx, list, draw_device, fz_identity, bounds, NULL);
 		buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
-		r->buffer = buffer;
 
 		size_t len = fz_buffer_storage(ctx, buffer, NULL);
-		const char *output = fz_string_from_buffer(ctx, buffer);
-		r->len = len;
-		r->data = output;
+		const char *result = fz_string_from_buffer(ctx, buffer);
+		output.len = len;
+		output.data = (char *)(result);
 	}
 	fz_catch(ctx) {
-		errorHandler(fz_caught_message(ctx));
-		exit = 1;
+		output.error = fz_caught_message(ctx);
 	}
 
-	fz_try(ctx)
-		fz_close_device(ctx, draw_device);
-	fz_catch(ctx) {
-		errorHandler(fz_caught_message(ctx));
-		exit = 1;
-	}
+	callbackSaveToPNGOutput(&output);
+	fz_drop_buffer(ctx, buffer);
+	fz_close_device(ctx, draw_device);
 	fz_drop_device(ctx, draw_device);
 	fz_drop_pixmap(ctx, pixmap);
 	fz_drop_device(ctx, device);
@@ -104,16 +127,11 @@ result *save_to_png(int page_number, int width, float scale, const unsigned char
 	fz_drop_page(ctx, page);
 	fz_drop_document(ctx, doc);
 	fz_drop_stream(ctx, stream);
-
-	if (exit == 1) {
-		drop_result(r);
-		return NULL;
-	}
-	return r;
+	fz_drop_context(ctx);
+	return NULL;
 }
 
-void drop_result(result *r) {
-	fz_drop_buffer(r->context, r->buffer);
-	fz_drop_context(r->context);
-	free(r);
-};
+void save_to_png(SaveToPNGInput *input) {
+	pthread_t thread;
+	pthread_create(&thread, NULL, save_to_png_runner, input);
+}
