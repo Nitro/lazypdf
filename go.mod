@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/DataDog/datadog-go v4.7.0+incompatible // indirect
 	github.com/Microsoft/go-winio v0.5.0 // indirect
-	github.com/google/uuid v1.2.0 // indirect
+	github.com/google/uuid v1.2.0
 	github.com/kr/text v0.2.0 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect

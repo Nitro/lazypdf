@@ -3,6 +3,8 @@ on:
     branches:
       - '**'
       - '!main'
+env:
+  MUPDF_VERSION: 1.18.0
 
 name: CI
 jobs:
@@ -42,11 +44,33 @@ jobs:
           git add .
           git diff --cached --exit-code
 
+      - name: MuPDF cache
+        id: cache
+        uses: actions/cache@v2
+        with:
+          path: tmp/build/release
+          key: ${{ matrix.os }}-mupdf-${{ env.MUPDF_VERSION }}
+
+      - name: Checkout MuPDF code
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v2
+        with:
+          repository: ArtifexSoftware/mupdf
+          ref: ${{ env.MUPDF_VERSION }}
+          submodules: true
+          path: tmp
+
+      - name: Build MuPDF
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: tmp
+        run: make tools
+
       - name: Build
         run: go build .
 
       - name: Test
         run: |
+          export PATH="tmp/build/release:$PATH"
           go get github.com/mfridman/tparse
           go test -race -cover -covermode=atomic -json | tparse -all
           go test -race -bench .
