@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"runtime"
 	"sync"
 	"unsafe"
 
@@ -44,7 +43,6 @@ type pageCountOutput struct {
 func init() {
 	saveToPNGState = make(map[string]saveToPNGOutput)
 	pageCountState = make(map[string]pageCountOutput)
-	C.init_state(C.ulong(runtime.NumCPU()))
 }
 
 // SaveToPNG is used to convert a page from a PDF file to PNG.
@@ -179,9 +177,4 @@ func cleanPageCountState(id string) {
 	pageCountMutex.Lock()
 	delete(pageCountState, id)
 	pageCountMutex.Unlock()
-}
-
-//export fatal
-func fatal(msg *C.char) {
-	panic(C.GoString(msg))
 }

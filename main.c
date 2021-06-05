@@ -1,54 +1,26 @@
+#include <pthread.h>
 #include "main.h"
 #include "_cgo_export.h"
-
-typedef struct {
-	fz_context *ctx;
-	fz_locks_context *locks;
-	pthread_mutex_t *mutex;
-} State;
-
-State *state;
-
-void lock_mutex(void *user, int lock) {
-	pthread_mutex_t *mutex = (pthread_mutex_t *) user;
-	if (pthread_mutex_lock(&mutex[lock]) != 0) {
-		fatal("fail to lock mutex");
-	}
-}
-
-void unlock_mutex(void *user, int lock) {
-	pthread_mutex_t *mutex = (pthread_mutex_t *) user;
-	if (pthread_mutex_unlock(&mutex[lock]) != 0) {
-		fatal("fail to unlock mutex");
-	}
-}
-
-void init_state(size_t lock_quantity) {
-	pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t)*lock_quantity);
-	fz_locks_context *locks = malloc(sizeof(fz_locks_context));
-	locks->user = mutex;
-	locks->lock = lock_mutex;
-	locks->unlock = unlock_mutex;
-
-	for (int i = 0; i < lock_quantity; i++) {
-		if (pthread_mutex_init(&mutex[i], NULL) != 0) {
-			fatal("fail to initialize mutex");
-		}
-	}
-
-	state = malloc(sizeof(State));
-	state->mutex = mutex;
-	state->locks = locks;
-	state->ctx = fz_new_context(NULL, state->locks, FZ_STORE_UNLIMITED);
-	fz_register_document_handlers(state->ctx);
-}
 
 void *page_count_runner(void *args) {
 	PageCountInput *input = args;
 	PageCountOutput output = { .id = input->id, .count = 0, .error = NULL };
-	fz_context *ctx = fz_clone_context(state->ctx);
+
+	fz_context *ctx = NULL;
+	ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
+	if (ctx == NULL) {
+		output.error = "fail to create a context";
+		callbackPageCountOutput(&output);
+		return NULL;
+	}
+	fz_register_document_handlers(ctx);
+
 	fz_stream *stream = NULL;
 	fz_document *doc = NULL;
+
+	fz_var(stream);
+	fz_var(doc);
+
 	fz_try(ctx) {
 		stream = fz_open_memory(ctx, input->payload, input->payload_length);
 		doc = fz_open_document_with_stream(ctx, "document.pdf", stream);
@@ -67,12 +39,14 @@ void *page_count_runner(void *args) {
 void page_count(PageCountInput *input) {
 	pthread_t thread;
 	pthread_create(&thread, NULL, page_count_runner, input);
+	pthread_detach(thread);
 }
 
 void *save_to_png_runner(void *args) {
 	SaveToPNGInput *input = args;
 	SaveToPNGOutput output = { .id = input->id, .data = NULL, .len = 0, .error = NULL};
-	fz_context *ctx = fz_clone_context(state->ctx);
+	fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
+	fz_register_document_handlers(ctx);
 	fz_stream *stream = NULL;
 	fz_document *doc = NULL;
 	fz_page *page = NULL;

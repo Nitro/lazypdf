@@ -1,7 +1,6 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#include <pthread.h>
 #include "pdf.h"
 
 typedef struct {
@@ -32,7 +31,6 @@ typedef struct {
 	const char *error;
 } PageCountOutput;
 
-void init_state(size_t lock_quantity);
 void page_count(PageCountInput *input);
 void save_to_png(SaveToPNGInput *input);
 
