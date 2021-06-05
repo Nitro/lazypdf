@@ -35,7 +35,8 @@ func TestSaveToPNGFail(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, file.Close()) }()
 
-	err = SaveToPNG(context.Background(), 0, 0, 0, file, nil)
+	buf := bytes.NewBuffer([]byte{})
+	err = SaveToPNG(context.Background(), 0, 0, 0, file, buf)
 	require.Error(t, err)
 }
 
