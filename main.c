@@ -2,68 +2,82 @@
 #include "main.h"
 #include "_cgo_export.h"
 
-int page_count(const unsigned char *payload, size_t payload_length) {
-	fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
-	if (!ctx) {
-		errorHandler("fail to create mupdf context");
-		return -1;
-	}
+page_count_output *page_count(page_count_input *input) {
+	page_count_output *output = malloc(sizeof(page_count_output));
+	output->count = 0;
+	output->error = NULL;
 
-	int exit = 0;
-	int page_count = 0;
+	fz_context *ctx = NULL;
+	ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
+	if (ctx == NULL) {
+		output->error = "fail to create a context";
+		return output;
+	}
+	fz_register_document_handlers(ctx);
+
 	fz_stream *stream = NULL;
-	fz_document *doc = NULL;
-	fz_try(ctx) {
-		fz_register_document_handlers(ctx);
-		stream = fz_open_memory(ctx, payload, payload_length);
-		doc = fz_open_document_with_stream(ctx, "document.pdf", stream);
-		page_count = fz_count_pages(ctx, doc);
-	} fz_catch(ctx) {
-		errorHandler(fz_caught_message(ctx));
-		exit = 1;
-	}
+	pdf_document *doc = NULL;
 
-	fz_drop_document(ctx, doc);
-	fz_drop_stream(ctx, stream);
-	fz_drop_context(ctx);
-	if (exit == 1) {
-		return -1;
+	fz_var(stream);
+	fz_var(doc);
+
+	fz_try(ctx) {
+		stream = fz_open_memory(ctx, input->payload, input->payload_length);
+		doc = pdf_open_document_with_stream(ctx, stream);
+		output->count = pdf_count_pages(ctx, doc);
+	} fz_always(ctx) {
+		pdf_drop_document(ctx, doc);
+		fz_drop_stream(ctx, stream);
+  } fz_catch(ctx) {
+		output->error = fz_caught_message(ctx);
 	}
-	return page_count;
+	fz_drop_context(ctx);
+
+	return output;
 }
 
-result *save_to_png(int page_number, int width, float scale, const unsigned char *payload, size_t payload_length) {
-	fz_context *ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
-	if (!ctx) {
-		errorHandler("fail to create mupdf context");
-		return NULL;
+save_to_png_output *save_to_png(save_to_png_input *input) {
+	save_to_png_output *output = malloc(sizeof(save_to_png_output));
+	output->ctx = NULL;
+	output->buffer = NULL;
+	output->data = NULL;
+	output->len = 0;
+	output->error = NULL;
+
+	output->ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
+	if (output->ctx == NULL) {
+		output->error = "fail to create a context";
+		return output;
 	}
+	fz_register_document_handlers(output->ctx);
 
-	result *r = malloc(sizeof(result));
-	r->context = ctx;
-	r->buffer = NULL;
-
-	int exit = 0;
 	fz_stream *stream = NULL;
-	fz_document *doc = NULL;
-	fz_page *page = NULL;
+	pdf_document *doc = NULL;
+	pdf_page *page = NULL;
 	fz_display_list *list = NULL;
 	fz_device *device = NULL;
 	fz_pixmap *pixmap = NULL;
 	fz_device *draw_device = NULL;
-	fz_buffer *buffer = NULL;
-	fz_try(ctx) {
-		fz_register_document_handlers(ctx);
-		stream = fz_open_memory(ctx, payload, payload_length);
-		doc = fz_open_document_with_stream(ctx, "document.pdf", stream);
-		page = fz_load_page(ctx, doc, page_number);
+
+	fz_var(stream);
+	fz_var(doc);
+	fz_var(page);
+	fz_var(list);
+	fz_var(device);
+	fz_var(pixmap);
+	fz_var(draw_device);
+
+	fz_try(output->ctx) {
+		stream = fz_open_memory(output->ctx, input->payload, input->payload_length);
+		doc = pdf_open_document_with_stream(output->ctx, stream);
+		page = pdf_load_page(output->ctx, doc, input->page);
 
 		float scale_factor = 1.5;
-		fz_rect bounds = fz_bound_page(ctx, page);
-		if (width != 0) {
-			scale_factor = width / bounds.x1;
-		} else if (scale != 0) {
-			scale_factor = scale;
+		fz_rect bounds = pdf_bound_page(output->ctx, page);
+		if (input->width != 0) {
+			scale_factor = input->width / bounds.x1;
+		} else if (input->scale != 0) {
+			scale_factor = input->scale;
 		} else if ((bounds.x1 - bounds.x0) > (bounds.y1 - bounds.y0)) {
 			scale_factor = 1;
 		}
@@ -71,49 +85,32 @@ result *save_to_png(int page_number, int width, float scale, const unsigned char
 		fz_matrix ctm = fz_scale(scale_factor, scale_factor);
 		bounds = fz_transform_rect(bounds, ctm);
 		fz_irect bbox = fz_round_rect(bounds);
-		list = fz_new_display_list(ctx, bounds);
-		device = fz_new_list_device(ctx, list);
-		fz_run_page(ctx, page, device, fz_identity, NULL);
-		pixmap = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, 1);
-		fz_clear_pixmap_with_value(ctx, pixmap, 0xff);
-		draw_device = fz_new_draw_device(ctx, ctm, pixmap);
-		fz_run_display_list(ctx, list, draw_device, fz_identity, bounds, NULL);
-		buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
-		r->buffer = buffer;
+		list = fz_new_display_list(output->ctx, bounds);
+		device = fz_new_list_device(output->ctx, list);
+		fz_enable_device_hints(output->ctx, device, FZ_NO_CACHE);
+		pdf_run_page(output->ctx, page, device, fz_identity, NULL);
+		pixmap = fz_new_pixmap_with_bbox(output->ctx, fz_device_rgb(output->ctx), bbox, NULL, 1);
+		fz_clear_pixmap_with_value(output->ctx, pixmap, 0xff);
+		draw_device = fz_new_draw_device(output->ctx, ctm, pixmap);
+		fz_run_display_list(output->ctx, list, draw_device, fz_identity, bounds, NULL);
+		output->buffer = fz_new_buffer_from_pixmap_as_png(output->ctx, pixmap, fz_default_color_params);
 
-		size_t len = fz_buffer_storage(ctx, buffer, NULL);
-		const char *output = fz_string_from_buffer(ctx, buffer);
-		r->len = len;
-		r->data = output;
-	}
-	fz_catch(ctx) {
-		errorHandler(fz_caught_message(ctx));
-		exit = 1;
+		size_t len = fz_buffer_storage(output->ctx, output->buffer, NULL);
+		const char *result = fz_string_from_buffer(output->ctx, output->buffer);
+		output->len = len;
+		output->data = (char *)(result);
+	} fz_always(output->ctx) {
+		fz_close_device(output->ctx, draw_device);
+		fz_drop_device(output->ctx, draw_device);
+		fz_drop_pixmap(output->ctx, pixmap);
+		fz_drop_device(output->ctx, device);
+		fz_drop_display_list(output->ctx, list);
+		fz_drop_page(output->ctx, (fz_page*)page);
+		pdf_drop_document(output->ctx, doc);
+		fz_drop_stream(output->ctx, stream);
+	} fz_catch(output->ctx) {
+		output->error = fz_caught_message(output->ctx);
 	}
 
-	fz_try(ctx)
-		fz_close_device(ctx, draw_device);
-	fz_catch(ctx) {
-		errorHandler(fz_caught_message(ctx));
-		exit = 1;
-	}
-	fz_drop_device(ctx, draw_device);
-	fz_drop_pixmap(ctx, pixmap);
-	fz_drop_device(ctx, device);
-	fz_drop_display_list(ctx, list);
-	fz_drop_page(ctx, page);
-	fz_drop_document(ctx, doc);
-	fz_drop_stream(ctx, stream);
-
-	if (exit == 1) {
-		drop_result(r);
-		return NULL;
-	}
-	return r;
+	return output;
 }
-
-void drop_result(result *r) {
-	fz_drop_buffer(r->context, r->buffer);
-	fz_drop_context(r->context);
-	free(r);
-};
