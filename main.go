@@ -13,24 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
-	"time"
+	"unsafe"
 
 	ddTracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
-// Global state to interact with C.
-// nolint: gochecknoglobals
-var (
-	baseCtx           context.Context
-	baseCtxCancel     func()
-	cancelationReason string
-	mutex             sync.Mutex
-)
-
 // SaveToPNG is used to convert a page from a PDF file to PNG.
 func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayload io.Reader, output io.Writer) error {
-	span, ctx := ddTracer.StartSpanFromContext(ctx, "lazypdf.SaveToPNG")
+	span, _ := ddTracer.StartSpanFromContext(ctx, "lazypdf.SaveToPNG")
 	defer span.Finish()
 
 	if rawPayload == nil {
@@ -40,11 +30,6 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 		return errors.New("output can't be nil")
 	}
 
-	t1 := time.Now()
-	mutex.Lock()
-	span.SetTag("LockContention", time.Since(t1))
-	defer mutex.Unlock()
-
 	payload, err := io.ReadAll(rawPayload)
 	if err != nil {
 		return fmt.Errorf("fail to read the payload: %w", err)
@@ -52,33 +37,37 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 	payloadPointer := C.CBytes(payload)
 	defer C.free(payloadPointer)
 
-	baseCtx, baseCtxCancel = context.WithCancel(ctx)
-	result := C.save_to_png(C.int(page), C.int(width), C.float(scale), (*C.uchar)(payloadPointer), C.size_t(len(payload)))
-	if baseCtx.Err() != nil {
-		return errors.New(cancelationReason)
+	input := C.save_to_png_input{
+		page:           C.int(page),
+		width:          C.int(width),
+		scale:          C.float(scale),
+		payload:        (*C.uchar)(payloadPointer),
+		payload_length: C.size_t(len(payload)),
 	}
-	defer C.drop_result(result)
+	result := C.save_to_png(&input) // nolint: gocritic
+	defer func() {
+		C.fz_drop_buffer(result.ctx, result.buffer)
+		C.fz_drop_context(result.ctx)
+		C.free(unsafe.Pointer(result))
+	}()
+	if result.error != nil {
+		return errors.New(C.GoString(result.error))
+	}
 
-	png := C.GoStringN(result.data, C.int(result.len))
-	if _, err = output.Write([]byte(png)); err != nil {
-		return fmt.Errorf("fail to write the result at the output: %w", err)
+	if _, err := output.Write([]byte(C.GoStringN(result.data, C.int(result.len)))); err != nil {
+		return fmt.Errorf("fail to write to the output: %w", err)
 	}
 	return nil
 }
 
 // PageCount is used to return the page count of the document.
 func PageCount(ctx context.Context, rawPayload io.Reader) (int, error) {
-	span, ctx := ddTracer.StartSpanFromContext(ctx, "lazypdf.PageCount")
+	span, _ := ddTracer.StartSpanFromContext(ctx, "lazypdf.PageCount")
 	defer span.Finish()
 
 	if rawPayload == nil {
 		return 0, errors.New("payload can't be nil")
 	}
-
-	t1 := time.Now()
-	mutex.Lock()
-	span.SetTag("LockContention", time.Since(t1))
-	defer mutex.Unlock()
 
 	payload, err := io.ReadAll(rawPayload)
 	if err != nil {
@@ -87,17 +76,14 @@ func PageCount(ctx context.Context, rawPayload io.Reader) (int, error) {
 	payloadPointer := C.CBytes(payload)
 	defer C.free(payloadPointer)
 
-	baseCtx, baseCtxCancel = context.WithCancel(ctx)
-	result := C.page_count((*C.uchar)(payloadPointer), C.size_t(len(payload)))
-	if baseCtx.Err() != nil {
-		return 0, errors.New(cancelationReason)
+	input := C.page_count_input{
+		payload:        (*C.uchar)(payloadPointer),
+		payload_length: C.size_t(len(payload)),
 	}
-
-	return int(result), nil
-}
-
-//export errorHandler
-func errorHandler(message *C.cchar) {
-	baseCtxCancel()
-	cancelationReason = C.GoString(message)
+	output := C.page_count(&input) // nolint: gocritic
+	defer C.free(unsafe.Pointer(output))
+	if output.error != nil {
+		return 0, errors.New(C.GoString(output.error))
+	}
+	return int(output.count), nil
 }

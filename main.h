@@ -3,17 +3,33 @@
 
 #include "pdf.h"
 
-typedef const char cchar;
+typedef struct {
+	const unsigned char *payload;
+	size_t payload_length;
+} page_count_input;
 
 typedef struct {
-	fz_context *context;
-	fz_buffer *buffer;
-	size_t len;
-	const char *data;
-} result;
+	int count;
+	const char *error;
+} page_count_output;
 
-int page_count(const unsigned char *payload, size_t payload_length);
-result *save_to_png(int page_number, int width, float scale, const unsigned char *payload, size_t payload_length);
-void drop_result(result *r);
+typedef struct {
+	int page;
+	int width;
+	float scale;
+	const unsigned char *payload;
+	size_t payload_length;
+} save_to_png_input;
+
+typedef struct {
+	fz_context *ctx;
+	fz_buffer *buffer;
+	char *data;
+	size_t len;
+	const char *error;
+} save_to_png_output;
+
+page_count_output *page_count(page_count_input *input);
+save_to_png_output *save_to_png(save_to_png_input *input);
 
 #endif
