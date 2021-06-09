@@ -46,8 +46,8 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 	}
 	result := C.save_to_png(&input) // nolint: gocritic
 	defer func() {
-		C.fz_drop_buffer(result.ctx, result.buffer)
-		C.fz_drop_context(result.ctx)
+		C.free(unsafe.Pointer(result.error))
+		C.free(unsafe.Pointer(result.data))
 		C.free(unsafe.Pointer(result))
 	}()
 	if result.error != nil {
@@ -81,7 +81,10 @@ func PageCount(ctx context.Context, rawPayload io.Reader) (int, error) {
 		payload_length: C.size_t(len(payload)),
 	}
 	output := C.page_count(&input) // nolint: gocritic
-	defer C.free(unsafe.Pointer(output))
+	defer func() {
+		C.free(unsafe.Pointer(output.error))
+		C.free(unsafe.Pointer(output))
+	}()
 	if output.error != nil {
 		return 0, errors.New(C.GoString(output.error))
 	}

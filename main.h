@@ -22,8 +22,6 @@ typedef struct {
 } save_to_png_input;
 
 typedef struct {
-	fz_context *ctx;
-	fz_buffer *buffer;
 	char *data;
 	size_t len;
 	const char *error;
