@@ -1,19 +1,59 @@
+#include <pthread.h>
 #include <string.h>
 #include "main.h"
 #include "_cgo_export.h"
+
+fz_context *global_ctx;
+fz_locks_context *global_ctx_lock;
+pthread_mutex_t *global_ctx_mutex;
+
+void fail(char *msg) {
+	fprintf(stderr, "%s\n", msg);
+	abort();
+}
+
+void lock_mutex(void *user, int lock) {
+	pthread_mutex_t *mutex = (pthread_mutex_t *) user;
+	if (pthread_mutex_lock(&mutex[lock]) != 0) {
+		fail("pthread_mutex_lock()");
+	}
+}
+
+void unlock_mutex(void *user, int lock) {
+	pthread_mutex_t *mutex = (pthread_mutex_t *) user;
+	if (pthread_mutex_unlock(&mutex[lock]) != 0) {
+		fail("pthread_mutex_unlock()");
+	}
+}
+
+void init(size_t lock_quantity) {
+	global_ctx_mutex = malloc(sizeof(pthread_mutex_t) * lock_quantity);
+
+	for (size_t i = 0; i < lock_quantity; i++) {
+		if (pthread_mutex_init(&global_ctx_mutex[i], NULL) != 0) {
+			fail("pthread_mutex_init()");
+		}
+	}
+
+	global_ctx_lock = malloc(sizeof(fz_locks_context));
+	global_ctx_lock->user = global_ctx_mutex;
+	global_ctx_lock->lock = lock_mutex;
+	global_ctx_lock->unlock = unlock_mutex;
+
+	global_ctx = fz_new_context(NULL, global_ctx_lock, FZ_STORE_DEFAULT);
+	fz_register_document_handlers(global_ctx);
+}
 
 page_count_output *page_count(page_count_input *input) {
 	page_count_output *output = malloc(sizeof(page_count_output));
 	output->count = 0;
 	output->error = NULL;
 
-	fz_context *ctx = NULL;
-	ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
+	fz_context *ctx = fz_clone_context(global_ctx);
 	if (ctx == NULL) {
 		output->error = strdup("fail to create a context");
 		return output;
 	}
-	fz_register_document_handlers(ctx);
 
 	fz_stream *stream = NULL;
 	pdf_document *doc = NULL;
@@ -42,13 +82,11 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 	output->len = 0;
 	output->error = NULL;
 
-	fz_context *ctx = NULL;
-	ctx = fz_new_context(NULL, NULL, FZ_STORE_DEFAULT);
+	fz_context *ctx = fz_clone_context(global_ctx);
 	if (ctx == NULL) {
 		output->error = strdup("fail to create a context");
 		return output;
 	}
-	fz_register_document_handlers(ctx);
 
 	fz_stream *stream = NULL;
 	pdf_document *doc = NULL;

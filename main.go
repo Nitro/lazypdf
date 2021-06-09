@@ -13,10 +13,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"unsafe"
 
 	ddTracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
+
+func init() {
+	C.init(C.ulong(runtime.NumCPU()))
+}
 
 // SaveToPNG is used to convert a page from a PDF file to PNG.
 func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayload io.Reader, output io.Writer) error {

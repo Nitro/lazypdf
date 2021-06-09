@@ -6,7 +6,6 @@ linters:
     - dupl
     - errcheck
     - gochecknoglobals
-    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
