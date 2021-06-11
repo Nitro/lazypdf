@@ -126,7 +126,9 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 		fz_enable_device_hints(ctx, device, FZ_NO_CACHE);
 		pdf_run_page(ctx, page, device, fz_identity, NULL);
 		buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
-		output->len = fz_buffer_extract(ctx, buffer, (unsigned char **)&output->data);
+		output->len = fz_buffer_storage(ctx, buffer, NULL);
+		output->data = malloc(sizeof(char)*output->len);
+		memcpy(output->data, fz_string_from_buffer(ctx, buffer), output->len);
 	} fz_always(ctx) {
 		fz_drop_buffer(ctx, buffer);
 		fz_try(ctx) {
