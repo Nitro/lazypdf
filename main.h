@@ -10,7 +10,7 @@ typedef struct {
 
 typedef struct {
 	int count;
-	const char *error;
+	char *error;
 } page_count_output;
 
 typedef struct {
@@ -24,7 +24,7 @@ typedef struct {
 typedef struct {
 	char *data;
 	size_t len;
-	const char *error;
+	char *error;
 } save_to_png_output;
 
 void init(size_t lock_quantity);
