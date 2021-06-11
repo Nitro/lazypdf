@@ -48,7 +48,7 @@ jobs:
       - name: Test
         run: |
           go get github.com/mfridman/tparse
-          go test -race -cover -covermode=atomic -json | tparse -all
+          go test -race -cover -covermode=atomic -json | tparse -all -dump -smallscreen
           go test -race -bench .
 
       - name: Go golangci-lint
