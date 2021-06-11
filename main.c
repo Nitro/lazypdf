@@ -1,7 +1,6 @@
 #include <pthread.h>
 #include <string.h>
 #include "main.h"
-#include "_cgo_export.h"
 
 fz_context *global_ctx;
 fz_locks_context *global_ctx_lock;
