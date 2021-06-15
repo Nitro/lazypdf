@@ -1,9 +1,9 @@
 package lazypdf
 
 /*
-#cgo CFLAGS: -I ${SRCDIR}/misc/mupdf/include -I ${SRCDIR}/misc/mupdf/include/mupdf
-#cgo darwin,amd64 LDFLAGS: -L ${SRCDIR}/misc/mupdf/lib/x86-64-macos -lmupdf -lmupdf-third
-#cgo linux,amd64 LDFLAGS: -L ${SRCDIR}/misc/mupdf/lib/x86-64-linux -lmupdf -lmupdf-third -lm
+#cgo CFLAGS: -I ${SRCDIR}/misc/mupdf/include -I ${SRCDIR}/misc/mupdf/include/mupdf -I ${SRCDIR}/misc/jemalloc/include -I ${SRCDIR}/misc/jemalloc/include/jemalloc
+#cgo darwin,amd64 LDFLAGS: -L ${SRCDIR}/misc/mupdf/lib/x86-64-macos -lmupdf -lmupdf-third -L ${SRCDIR}/misc/jemalloc/lib/x86-64-macos -ljemalloc
+#cgo linux,amd64 LDFLAGS: -L ${SRCDIR}/misc/mupdf/lib/x86-64-linux -lmupdf -lmupdf-third -L ${SRCDIR}/misc/jemalloc/lib/x86-64-linux -ljemalloc -lm -lpthread -ldl
 #include "main.h"
 */
 import "C"
@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"unsafe"
 
 	ddTracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
@@ -49,11 +48,7 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 		payload_length: C.size_t(len(payload)),
 	}
 	result := C.save_to_png(&input) // nolint: gocritic
-	defer func() {
-		C.free(unsafe.Pointer(result.error))
-		C.free(unsafe.Pointer(result.data))
-		C.free(unsafe.Pointer(result))
-	}()
+	defer C.drop_save_to_png_output(result)
 	if result.error != nil {
 		return errors.New(C.GoString(result.error))
 	}
@@ -85,10 +80,7 @@ func PageCount(ctx context.Context, rawPayload io.Reader) (int, error) {
 		payload_length: C.size_t(len(payload)),
 	}
 	output := C.page_count(&input) // nolint: gocritic
-	defer func() {
-		C.free(unsafe.Pointer(output.error))
-		C.free(unsafe.Pointer(output))
-	}()
+	defer C.drop_page_count_output(output)
 	if output.error != nil {
 		return 0, errors.New(C.GoString(output.error))
 	}

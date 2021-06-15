@@ -1,10 +1,86 @@
+#include <jemalloc/jemalloc.h>
 #include <pthread.h>
 #include <string.h>
 #include "main.h"
 
+typedef struct {
+	size_t size;
+#if defined(_M_IA64) || defined(_M_AMD64)
+	size_t align;
+#endif
+} trace_header;
+
+typedef struct {
+	size_t current;
+	size_t peak;
+	size_t total;
+	size_t allocs;
+	size_t mem_limit;
+	size_t alloc_limit;
+} trace_info;
+
+const char* fail_to_create_context = "fail to create a context";
 fz_context *global_ctx;
 fz_locks_context *global_ctx_lock;
 pthread_mutex_t *global_ctx_mutex;
+trace_info *tinfo;
+fz_alloc_context *trace_alloc_ctx;
+
+static void *trace_malloc(void *arg, size_t size) {
+	trace_info *info = (trace_info *) arg;
+	trace_header *p;
+	if (size == 0)
+		return NULL;
+	if (size > SIZE_MAX - sizeof(trace_header))
+		return NULL;
+	p = je_malloc(size + sizeof(trace_header));
+	if (p == NULL)
+		return NULL;
+	p[0].size = size;
+	info->current += size;
+	info->total += size;
+	if (info->current > info->peak)
+		info->peak = info->current;
+	info->allocs++;
+	return (void *)&p[1];
+}
+
+static void trace_free(void *arg, void *p_) {
+	trace_info *info = (trace_info *) arg;
+	trace_header *p = (trace_header *)p_;
+
+	if (p == NULL)
+		return;
+	info->current -= p[-1].size;
+	je_free(&p[-1]);
+}
+
+static void *trace_realloc(void *arg, void *p_, size_t size) {
+	trace_info *info = (trace_info *) arg;
+	trace_header *p = (trace_header *)p_;
+	size_t oldsize;
+
+	if (size == 0) {
+		trace_free(arg, p_);
+		return NULL;
+	}
+	if (p == NULL)
+		return trace_malloc(arg, size);
+	if (size > SIZE_MAX - sizeof(trace_header))
+		return NULL;
+	oldsize = p[-1].size;
+	p = je_realloc(&p[-1], size + sizeof(trace_header));
+	if (p == NULL)
+		return NULL;
+	info->current += size - oldsize;
+	if (size > oldsize)
+		info->total += size - oldsize;
+	if (info->current > info->peak)
+		info->peak = info->current;
+	p[0].size = size;
+	info->allocs++;
+	return &p[1];
+}
 
 void fail(char *msg) {
 	fprintf(stderr, "%s\n", msg);
@@ -26,30 +102,44 @@ void unlock_mutex(void *user, int lock) {
 }
 
 void init() {
-	global_ctx_mutex = malloc(sizeof(pthread_mutex_t) * FZ_LOCK_MAX);
+	global_ctx_mutex = je_malloc(sizeof(pthread_mutex_t) * FZ_LOCK_MAX);
 	for (size_t i = 0; i < FZ_LOCK_MAX; i++) {
 		if (pthread_mutex_init(&global_ctx_mutex[i], NULL) != 0) {
 			fail("pthread_mutex_init()");
 		}
 	}
 
-	global_ctx_lock = malloc(sizeof(fz_locks_context));
+	global_ctx_lock = je_malloc(sizeof(fz_locks_context));
 	global_ctx_lock->user = global_ctx_mutex;
 	global_ctx_lock->lock = lock_mutex;
 	global_ctx_lock->unlock = unlock_mutex;
 
-	global_ctx = fz_new_context(NULL, global_ctx_lock, FZ_STORE_DEFAULT);
+	tinfo = je_malloc(sizeof(trace_info));
+	tinfo->current = 0;
+	tinfo->peak = 0;
+	tinfo->total = 0;
+	tinfo->allocs = 0;
+	tinfo->mem_limit = 0;
+	tinfo->alloc_limit = 0;
+
+	trace_alloc_ctx = je_malloc(sizeof(fz_alloc_context));
+	trace_alloc_ctx->user = tinfo;
+	trace_alloc_ctx->malloc = trace_malloc;
+	trace_alloc_ctx->realloc = trace_realloc;
+	trace_alloc_ctx->free = trace_free;
+
+	global_ctx = fz_new_context(trace_alloc_ctx, global_ctx_lock, FZ_STORE_DEFAULT);
 	fz_register_document_handlers(global_ctx);
 }
 
 page_count_output *page_count(page_count_input *input) {
-	page_count_output *output = malloc(sizeof(page_count_output));
+	page_count_output *output = je_malloc(sizeof(page_count_output));
 	output->count = 0;
 	output->error = NULL;
 
 	fz_context *ctx = fz_clone_context(global_ctx);
 	if (ctx == NULL) {
-		output->error = strdup("fail to create a context");
+		output->error = fail_to_create_context;
 		return output;
 	}
 
@@ -67,7 +157,7 @@ page_count_output *page_count(page_count_input *input) {
 		pdf_drop_document(ctx, doc);
 		fz_drop_stream(ctx, stream);
   } fz_catch(ctx) {
-		output->error = strdup(fz_caught_message(ctx));
+		output->error = fz_caught_message(ctx);
 	}
 	fz_drop_context(ctx);
 
@@ -75,14 +165,14 @@ page_count_output *page_count(page_count_input *input) {
 }
 
 save_to_png_output *save_to_png(save_to_png_input *input) {
-	save_to_png_output *output = malloc(sizeof(save_to_png_output));
+	save_to_png_output *output = je_malloc(sizeof(save_to_png_output));
 	output->data = NULL;
 	output->len = 0;
 	output->error = NULL;
 
 	fz_context *ctx = fz_clone_context(global_ctx);
 	if (ctx == NULL) {
-		output->error = strdup("fail to create a context");
+		output->error = fail_to_create_context;
 		return output;
 	}
 
@@ -125,7 +215,7 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 		pdf_run_page(ctx, page, device, fz_identity, NULL);
 		buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
 		output->len = fz_buffer_storage(ctx, buffer, NULL);
-		output->data = malloc(sizeof(char)*output->len);
+		output->data = je_malloc(sizeof(char)*output->len);
 		memcpy(output->data, fz_string_from_buffer(ctx, buffer), output->len);
 	} fz_always(ctx) {
 		fz_drop_buffer(ctx, buffer);
@@ -138,9 +228,18 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 		pdf_drop_document(ctx, doc);
 		fz_drop_stream(ctx, stream);
 	} fz_catch(ctx) {
-		output->error = strdup(fz_caught_message(ctx));
+		output->error = fz_caught_message(ctx);
 	}
 	fz_drop_context(ctx);
 
 	return output;
+}
+
+void drop_page_count_output(page_count_output *output) {
+	je_free(output);
+}
+
+void drop_save_to_png_output(save_to_png_output *output) {
+	je_free(output->data);
+	je_free(output);
 }
