@@ -10,7 +10,7 @@ typedef struct {
 
 typedef struct {
 	int count;
-	char *error;
+	const char *error;
 } page_count_output;
 
 typedef struct {
@@ -24,11 +24,15 @@ typedef struct {
 typedef struct {
 	char *data;
 	size_t len;
-	char *error;
+	const char *error;
 } save_to_png_output;
 
 void init();
+
 page_count_output *page_count(page_count_input *input);
+void drop_page_count_output(page_count_output *output);
+
 save_to_png_output *save_to_png(save_to_png_input *input);
+void drop_save_to_png_output(save_to_png_output *output);
 
 #endif
