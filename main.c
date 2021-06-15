@@ -25,10 +25,9 @@ void unlock_mutex(void *user, int lock) {
 	}
 }
 
-void init(size_t lock_quantity) {
-	global_ctx_mutex = malloc(sizeof(pthread_mutex_t) * lock_quantity);
-
-	for (size_t i = 0; i < lock_quantity; i++) {
+void init() {
+	global_ctx_mutex = malloc(sizeof(pthread_mutex_t) * FZ_LOCK_MAX);
+	for (size_t i = 0; i < FZ_LOCK_MAX; i++) {
 		if (pthread_mutex_init(&global_ctx_mutex[i], NULL) != 0) {
 			fail("pthread_mutex_init()");
 		}

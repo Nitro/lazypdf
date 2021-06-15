@@ -27,7 +27,7 @@ typedef struct {
 	char *error;
 } save_to_png_output;
 
-void init(size_t lock_quantity);
+void init();
 page_count_output *page_count(page_count_input *input);
 save_to_png_output *save_to_png(save_to_png_input *input);
 
