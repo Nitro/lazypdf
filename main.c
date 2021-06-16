@@ -130,6 +130,8 @@ void init() {
 
 	global_ctx = fz_new_context(trace_alloc_ctx, global_ctx_lock, FZ_STORE_DEFAULT);
 	fz_register_document_handlers(global_ctx);
+	fz_set_error_callback(global_ctx, NULL, NULL);
+	fz_set_warning_callback(global_ctx, NULL, NULL);
 }
 
 page_count_output *page_count(page_count_input *input) {
