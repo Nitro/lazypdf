@@ -5,6 +5,7 @@ on:
       - '!main'
     paths:
       - misc/jemalloc/version
+      - .github/workflows/jemalloc.yml
 
 name: Jemalloc
 jobs:
