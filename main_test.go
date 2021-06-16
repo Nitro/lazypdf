@@ -35,8 +35,9 @@ func TestSaveToPNGFail(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, file.Close()) }()
 
-	err = SaveToPNG(context.Background(), 0, 0, 0, file, nil)
+	err = SaveToPNG(context.Background(), 0, 0, 0, file, bytes.NewBuffer([]byte{}))
 	require.Error(t, err)
+	require.Equal(t, "no objects found", err.Error())
 }
 
 func TestPageCount(t *testing.T) {
@@ -56,6 +57,7 @@ func TestPageCountFail(t *testing.T) {
 
 	_, err = PageCount(context.Background(), file)
 	require.Error(t, err)
+	require.Equal(t, "no objects found", err.Error())
 }
 
 func BenchmarkSaveToPNGPage0(b *testing.B)  { benchmarkSaveToPNGRunner(0, b) }
