@@ -5,6 +5,7 @@ on:
       - '!main'
     paths:
       - misc/mupdf/version
+      - .github/workflows/mupdf.yml
 
 name: MuPDF
 jobs:
