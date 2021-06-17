@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/ext"
 	ddTracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
@@ -25,25 +24,18 @@ func init() {
 // SaveToPNG is used to convert a page from a PDF file to PNG.
 func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayload io.Reader, output io.Writer) (err error) {
 	span, _ := ddTracer.StartSpanFromContext(ctx, "lazypdf.SaveToPNG")
-	defer span.Finish()
+	defer span.Finish(ddTracer.WithError(err))
 
 	if rawPayload == nil {
-		msg := "payload can't be nil"
-		span.SetTag(ext.ErrorMsg, msg)
-		return errors.New(msg)
+		return errors.New("payload can't be nil")
 	}
 	if output == nil {
-		msg := "output can't be nil"
-		span.SetTag(ext.ErrorMsg, msg)
-		return errors.New(msg)
+		return errors.New("output can't be nil")
 	}
 
 	payload, err := io.ReadAll(rawPayload)
 	if err != nil {
-		msg := "fail to read the payload"
-		span.SetTag(ext.ErrorMsg, msg)
-		span.SetTag(ext.ErrorDetails, err.Error())
-		return fmt.Errorf("%s: %w", msg, err)
+		return fmt.Errorf("fail to read the payload: %w", err)
 	}
 	payloadPointer := C.CBytes(payload)
 	defer C.free(payloadPointer)
@@ -58,18 +50,11 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 	result := C.save_to_png(&input) // nolint: gocritic
 	defer C.drop_save_to_png_output(result)
 	if result.error != nil {
-		msg := "failure at the C/MuPDF layer"
-		reason := C.GoString(result.error)
-		span.SetTag(ext.ErrorMsg, msg)
-		span.SetTag(ext.ErrorDetails, reason)
-		return fmt.Errorf("%s: %s", msg, reason)
+		return fmt.Errorf("failure at the C/MuPDF layer: %s", C.GoString(result.error))
 	}
 
 	if _, err := output.Write([]byte(C.GoStringN(result.data, C.int(result.len)))); err != nil {
-		msg := "fail to write to the output"
-		span.SetTag(ext.ErrorMsg, msg)
-		span.SetTag(ext.ErrorDetails, err.Error())
-		return fmt.Errorf("%s: %w", msg, err)
+		return fmt.Errorf("fail to write to the output: %w", err)
 	}
 	return nil
 }
@@ -77,20 +62,15 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 // PageCount is used to return the page count of the document.
 func PageCount(ctx context.Context, rawPayload io.Reader) (_ int, err error) {
 	span, _ := ddTracer.StartSpanFromContext(ctx, "lazypdf.PageCount")
-	defer span.Finish()
+	defer span.Finish(ddTracer.WithError(err))
 
 	if rawPayload == nil {
-		msg := "payload can't be nil"
-		span.SetTag(ext.ErrorMsg, msg)
-		return 0, errors.New(msg)
+		return 0, errors.New("payload can't be nil")
 	}
 
 	payload, err := io.ReadAll(rawPayload)
 	if err != nil {
-		msg := "fail to read the payload"
-		span.SetTag(ext.ErrorMsg, msg)
-		span.SetTag(ext.ErrorDetails, err.Error())
-		return 0, fmt.Errorf("%s: %w", msg, err)
+		return 0, fmt.Errorf("fail to read the payload: %w", err)
 	}
 	payloadPointer := C.CBytes(payload)
 	defer C.free(payloadPointer)
@@ -102,11 +82,7 @@ func PageCount(ctx context.Context, rawPayload io.Reader) (_ int, err error) {
 	output := C.page_count(&input) // nolint: gocritic
 	defer C.drop_page_count_output(output)
 	if output.error != nil {
-		msg := "failure at the C/MuPDF layer"
-		reason := C.GoString(output.error)
-		span.SetTag(ext.ErrorMsg, msg)
-		span.SetTag(ext.ErrorDetails, reason)
-		return 0, fmt.Errorf("%s: %s", msg, reason)
+		return 0, fmt.Errorf("failure at the C/MuPDF layer: %s", C.GoString(output.error))
 	}
 	return int(output.count), nil
 }
