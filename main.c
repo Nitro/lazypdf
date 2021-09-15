@@ -166,6 +166,42 @@ page_count_output *page_count(page_count_input *input) {
 	return output;
 }
 
+static pdf_obj *pdf_lookup_inherited_page_item(fz_context *ctx, pdf_obj *node, pdf_obj *key) {
+	pdf_obj *node2 = node;
+	pdf_obj *val;
+
+	fz_try(ctx) {
+		do {
+			val = pdf_dict_get(ctx, node, key);
+			if (val)
+				break;
+			if (pdf_mark_obj(ctx, node))
+				fz_throw(ctx, FZ_ERROR_GENERIC, "cycle in page tree (parents)");
+			node = pdf_dict_get(ctx, node, PDF_NAME(Parent));
+		}
+		while (node);
+	}
+	fz_always(ctx) {
+		do {
+			pdf_unmark_obj(ctx, node2);
+			if (node2 == node)
+				break;
+			node2 = pdf_dict_get(ctx, node2, PDF_NAME(Parent));
+		}
+		while (node2);
+	}
+	fz_catch(ctx) {
+		fz_rethrow(ctx);
+	}
+
+	return val;
+}
+
+int get_rotation(fz_context *ctx, pdf_page *page) {
+	pdf_obj *page_obj = page->obj;
+	return pdf_to_int(ctx, pdf_lookup_inherited_page_item(ctx, page_obj, PDF_NAME(Rotate)));
+}
+
 save_to_png_output *save_to_png(save_to_png_input *input) {
 	save_to_png_output *output = je_malloc(sizeof(save_to_png_output));
 	output->data = NULL;
@@ -204,7 +240,14 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 		} else if (input->scale != 0) {
 			scale_factor = input->scale;
 		} else if ((bounds.x1 - bounds.x0) > (bounds.y1 - bounds.y0)) {
-			scale_factor = 1;
+			switch (get_rotation(ctx, page)) {
+				case 0:
+				case 180:
+					scale_factor = 1;
+					break;
+				default:
+					scale_factor = 1.5;
+			}
 		}
 
 		fz_matrix ctm = fz_scale(scale_factor, scale_factor);
