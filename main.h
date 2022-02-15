@@ -4,35 +4,32 @@
 #include "pdf.h"
 
 typedef struct {
-	const unsigned char *payload;
+	char *payload;
 	size_t payload_length;
 } page_count_input;
 
 typedef struct {
 	int count;
-	const char *error;
+	char *error;
 } page_count_output;
 
 typedef struct {
 	int page;
 	int width;
 	float scale;
-	const unsigned char *payload;
+	char *payload;
 	size_t payload_length;
 } save_to_png_input;
 
 typedef struct {
-	char *data;
-	size_t len;
-	const char *error;
+	char *payload;
+	size_t payload_length;
+	char *error;
 } save_to_png_output;
 
 void init();
 
-page_count_output *page_count(page_count_input *input);
-void drop_page_count_output(page_count_output *output);
-
-save_to_png_output *save_to_png(save_to_png_input *input);
-void drop_save_to_png_output(save_to_png_output *output);
+page_count_output page_count(page_count_input input);
+save_to_png_output save_to_png(save_to_png_input input);
 
 #endif
