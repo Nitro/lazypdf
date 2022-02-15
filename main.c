@@ -19,7 +19,6 @@ typedef struct {
 	size_t alloc_limit;
 } trace_info;
 
-const char* fail_to_create_context = "fail to create a context";
 fz_context *global_ctx;
 fz_locks_context *global_ctx_lock;
 pthread_mutex_t *global_ctx_mutex;
@@ -134,14 +133,14 @@ void init() {
 	fz_set_warning_callback(global_ctx, NULL, NULL);
 }
 
-page_count_output *page_count(page_count_input *input) {
-	page_count_output *output = je_malloc(sizeof(page_count_output));
-	output->count = 0;
-	output->error = NULL;
+page_count_output page_count(page_count_input input) {
+	page_count_output output;
+	output.count = 0;
+	output.error = NULL;
 
 	fz_context *ctx = fz_clone_context(global_ctx);
 	if (ctx == NULL) {
-		output->error = fail_to_create_context;
+		output.error = strdup("fail to create a context");
 		return output;
 	}
 
@@ -152,14 +151,14 @@ page_count_output *page_count(page_count_input *input) {
 	fz_var(doc);
 
 	fz_try(ctx) {
-		stream = fz_open_memory(ctx, input->payload, input->payload_length);
+		stream = fz_open_memory(ctx, (const unsigned char *)input.payload, input.payload_length);
 		doc = pdf_open_document_with_stream(ctx, stream);
-		output->count = pdf_count_pages(ctx, doc);
+		output.count = pdf_count_pages(ctx, doc);
 	} fz_always(ctx) {
 		pdf_drop_document(ctx, doc);
 		fz_drop_stream(ctx, stream);
   } fz_catch(ctx) {
-		output->error = fz_caught_message(ctx);
+		output.error = strdup(fz_caught_message(ctx));
 	}
 	fz_drop_context(ctx);
 
@@ -202,15 +201,15 @@ int get_rotation(fz_context *ctx, pdf_page *page) {
 	return pdf_to_int(ctx, pdf_lookup_inherited_page_item(ctx, page_obj, PDF_NAME(Rotate)));
 }
 
-save_to_png_output *save_to_png(save_to_png_input *input) {
-	save_to_png_output *output = je_malloc(sizeof(save_to_png_output));
-	output->data = NULL;
-	output->len = 0;
-	output->error = NULL;
+save_to_png_output save_to_png(save_to_png_input input) {
+	save_to_png_output output;
+	output.payload = NULL;
+	output.payload_length = 0;
+	output.error = NULL;
 
 	fz_context *ctx = fz_clone_context(global_ctx);
 	if (ctx == NULL) {
-		output->error = fail_to_create_context;
+		output.error = strdup("fail to create a context");
 		return output;
 	}
 
@@ -229,16 +228,16 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 	fz_var(buffer);
 
 	fz_try(ctx) {
-		stream = fz_open_memory(ctx, input->payload, input->payload_length);
+		stream = fz_open_memory(ctx, (const unsigned char *)input.payload, input.payload_length);
 		doc = pdf_open_document_with_stream(ctx, stream);
-		page = pdf_load_page(ctx, doc, input->page);
+		page = pdf_load_page(ctx, doc, input.page);
 
 		float scale_factor = 1.5;
 		fz_rect bounds = pdf_bound_page(ctx, page);
-		if (input->width != 0) {
-			scale_factor = input->width / bounds.x1;
-		} else if (input->scale != 0) {
-			scale_factor = input->scale;
+		if (input.width != 0) {
+			scale_factor = input.width / bounds.x1;
+		} else if (input.scale != 0) {
+			scale_factor = input.scale;
 		} else if ((bounds.x1 - bounds.x0) > (bounds.y1 - bounds.y0)) {
 			switch (get_rotation(ctx, page)) {
 				case 0:
@@ -259,9 +258,9 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 		fz_enable_device_hints(ctx, device, FZ_NO_CACHE);
 		pdf_run_page(ctx, page, device, fz_identity, NULL);
 		buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
-		output->len = fz_buffer_storage(ctx, buffer, NULL);
-		output->data = je_malloc(sizeof(char)*output->len);
-		memcpy(output->data, fz_string_from_buffer(ctx, buffer), output->len);
+		output.payload_length = fz_buffer_storage(ctx, buffer, NULL);
+		output.payload = je_malloc(sizeof(char)*output.payload_length);
+		memcpy(output.payload, fz_string_from_buffer(ctx, buffer), output.payload_length);
 	} fz_always(ctx) {
 		fz_drop_buffer(ctx, buffer);
 		fz_try(ctx) {
@@ -273,18 +272,19 @@ save_to_png_output *save_to_png(save_to_png_input *input) {
 		pdf_drop_document(ctx, doc);
 		fz_drop_stream(ctx, stream);
 	} fz_catch(ctx) {
-		output->error = fz_caught_message(ctx);
+		output.error = strdup(fz_caught_message(ctx));
 	}
 	fz_drop_context(ctx);
 
 	return output;
 }
 
-void drop_page_count_output(page_count_output *output) {
-	je_free(output);
-}
-
-void drop_save_to_png_output(save_to_png_output *output) {
-	je_free(output->data);
-	je_free(output);
+char *strdup(const char *s1) {
+  char *str;
+  size_t size = strlen(s1) + 1;
+  str = je_malloc(size);
+  if (str) {
+    memcpy(str, s1, size);
+  }
+  return str;
 }
