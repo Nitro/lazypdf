@@ -23,7 +23,12 @@ func init() {
 	C.init()
 }
 
-// SaveToPNG is used to convert a page from a PDF file to PNG.
+// SaveToPNG is used to convert a page from a PDF file to PNG. Internally everything is based on the scale factor and this value
+// is used to determine the actual output size based on the original size of the page.
+// If none is set we'll use a default scale factor of 1.5. When using the default value, 1.5, there is a special case when we
+// detect that the page is a landscape and it has a 0 or 180 degree rotation, on those cases we set the scale factor as 1.
+// If width is set then we'll calculate the scale factor by dividing the width by the page horizontal size.
+// If both width and scale are set we'll use only the scale as it takes precedence.
 func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayload io.Reader, output io.Writer) (err error) {
 	span, _ := ddTracer.StartSpanFromContext(ctx, "lazypdf.SaveToPNG")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
