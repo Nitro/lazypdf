@@ -51,7 +51,12 @@ func SaveToPNG(ctx context.Context, page, width uint16, scale float32, rawPayloa
 		scale:          C.float(scale),
 		payload:        (*C.char)(unsafe.Pointer(&payload[0])),
 		payload_length: C.size_t(len(payload)),
+		cookie:         &C.fz_cookie{abort: 0},
 	}
+	go func() {
+		<-ctx.Done()
+		input.cookie.abort = 1
+	}()
 	result := C.save_to_png(input) // nolint: gocritic
 	defer C.je_free(unsafe.Pointer(result.payload))
 	if result.error != nil {
