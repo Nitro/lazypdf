@@ -256,7 +256,7 @@ save_to_png_output save_to_png(save_to_png_input input) {
 		fz_clear_pixmap_with_value(ctx, pixmap, 0xff);
 		device = fz_new_draw_device(ctx, ctm, pixmap);
 		fz_enable_device_hints(ctx, device, FZ_NO_CACHE);
-		pdf_run_page(ctx, page, device, fz_identity, NULL);
+		pdf_run_page(ctx, page, device, fz_identity, input.cookie);
 		buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
 		output.payload_length = fz_buffer_storage(ctx, buffer, NULL);
 		output.payload = je_malloc(sizeof(char)*output.payload_length);

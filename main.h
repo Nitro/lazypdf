@@ -19,6 +19,7 @@ typedef struct {
 	float scale;
 	char *payload;
 	size_t payload_length;
+	fz_cookie *cookie;
 } save_to_png_input;
 
 typedef struct {
