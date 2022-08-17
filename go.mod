@@ -3,7 +3,7 @@ module github.com/nitro/lazypdf/v2
 go 1.17
 
 require (
-	github.com/stretchr/testify v1.7.5
+	github.com/stretchr/testify v1.8.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.40.1
 )
 
