@@ -45,7 +45,7 @@ jobs:
       - name: Dependency linter
         if: matrix.os == 'ubuntu-latest'
         run: |
-          go mod tidy
+          go mod tidy -compat=1.17
           git add .
           git diff --cached --exit-code
 
