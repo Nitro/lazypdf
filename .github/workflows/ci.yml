@@ -1,8 +1,8 @@
 on:
   push:
     branches:
-      - '**'
-      - '!main'
+      - "**"
+      - "!main"
 
 name: CI
 jobs:
@@ -16,16 +16,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17
+          go-version: 1.19
 
       - name: Go cache
         id: cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cache/go-build
@@ -39,13 +39,13 @@ jobs:
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          go install github.com/mfridman/tparse@v0.8.3
+          go install github.com/mfridman/tparse@v0.11.1
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.1
 
       - name: Dependency linter
         if: matrix.os == 'ubuntu-latest'
         run: |
-          go mod tidy -compat=1.17
+          go mod tidy -compat=1.19
           git add .
           git diff --cached --exit-code
 

@@ -2,8 +2,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - '**'
-      - '!main'
+      - "**"
+      - "!main"
     paths:
       - misc/jemalloc/version
       - .github/workflows/jemalloc.yml
@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Export jemalloc Version
         id: jemalloc-version
@@ -40,10 +40,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Checkout Jemalloc code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: jemalloc/jemalloc
           ref: ${{needs.version.outputs.version}}
@@ -82,10 +82,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Checkout Jemalloc code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: jemalloc/jemalloc
           ref: ${{needs.version.outputs.version}}

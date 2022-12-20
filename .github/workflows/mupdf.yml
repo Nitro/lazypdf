@@ -2,8 +2,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - '**'
-      - '!main'
+      - "**"
+      - "!main"
     paths:
       - misc/mupdf/version
       - .github/workflows/mupdf.yml
@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Export MuPDF Version
         id: mupdf-version
@@ -40,10 +40,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Checkout MuPDF code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ArtifexSoftware/mupdf
           ref: ${{needs.version.outputs.version}}
@@ -81,10 +81,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Checkout MuPDF code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ArtifexSoftware/mupdf
           ref: ${{needs.version.outputs.version}}
