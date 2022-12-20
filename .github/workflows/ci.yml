@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          go install github.com/mfridman/tparse@v0.11.1
+          go install github.com/mfridman/tparse@v0.8.3
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.42.1
 
       - name: Dependency linter
