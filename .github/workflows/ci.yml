@@ -1,8 +1,8 @@
 on:
   push:
     branches:
-      - '**'
-      - '!main'
+      - "**"
+      - "!main"
 
 name: CI
 jobs:
@@ -21,7 +21,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17
+          go-version: 1.19
 
       - name: Go cache
         id: cache
@@ -45,7 +45,7 @@ jobs:
       - name: Dependency linter
         if: matrix.os == 'ubuntu-latest'
         run: |
-          go mod tidy -compat=1.17
+          go mod tidy -compat=1.19
           git add .
           git diff --cached --exit-code
 
