@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -17,8 +17,8 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_FITZ_MATH_H
 #define MUPDF_FITZ_MATH_H
@@ -115,6 +115,11 @@ static inline size_t fz_minz(size_t a, size_t b)
 	return (a < b ? a : b);
 }
 
+static inline int64_t fz_mini64(int64_t a, int64_t b)
+{
+	return (a < b ? a : b);
+}
+
 static inline float fz_max(float a, float b)
 {
 	return (a > b ? a : b);
@@ -135,24 +140,29 @@ static inline int64_t fz_maxi64(int64_t a, int64_t b)
 	return (a > b ? a : b);
 }
 
-static inline float fz_clamp(float f, float min, float max)
+static inline float fz_clamp(float x, float min, float max)
 {
-	return (f > min ? (f < max ? f : max) : min);
+	return x < min ? min : x > max ? max : x;
 }
 
-static inline int fz_clampi(int i, int min, int max)
+static inline int fz_clampi(int x, int min, int max)
 {
-	return (i > min ? (i < max ? i : max) : min);
+	return x < min ? min : x > max ? max : x;
 }
 
-static inline double fz_clampd(double d, double min, double max)
+static inline int64_t fz_clamp64(int64_t x, int64_t min, int64_t max)
 {
-	return (d > min ? (d < max ? d : max) : min);
+	return x < min ? min : x > max ? max : x;
 }
 
-static inline void *fz_clampp(void *p, void *min, void *max)
+static inline double fz_clampd(double x, double min, double max)
 {
-	return (p > min ? (p < max ? p : max) : min);
+	return x < min ? min : x > max ? max : x;
+}
+
+static inline void *fz_clampp(void *x, void *min, void *max)
+{
+	return x < min ? min : x > max ? max : x;
 }
 
 #define DIV_BY_ZERO(a, b, min, max) (((a) < 0) ^ ((b) < 0) ? (min) : (max))

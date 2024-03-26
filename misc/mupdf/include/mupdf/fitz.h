@@ -17,8 +17,8 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUDPF_FITZ_H
 #define MUDPF_FITZ_H
@@ -51,6 +51,8 @@ extern "C" {
 #include "mupdf/fitz/compressed-buffer.h"
 #include "mupdf/fitz/filter.h"
 #include "mupdf/fitz/archive.h"
+#include "mupdf/fitz/heap.h"
+
 
 /* Resources */
 #include "mupdf/fitz/store.h"
@@ -84,6 +86,9 @@ extern "C" {
 #include "mupdf/fitz/band-writer.h"
 #include "mupdf/fitz/write-pixmap.h"
 #include "mupdf/fitz/output-svg.h"
+
+#include "mupdf/fitz/story.h"
+#include "mupdf/fitz/story-writer.h"
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2023 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -20,24 +20,34 @@
 // Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
 // CA 94129, USA, for further information.
 
-#ifndef MUPDF_PDF_JAVASCRIPT_H
-#define MUPDF_PDF_JAVASCRIPT_H
+// This header allows people to easily build HTML-based document handlers.
 
-#include "mupdf/pdf/document.h"
-#include "mupdf/pdf/form.h"
+#ifndef MUPDF_HTML_HTML_H
+#define MUPDF_HTML_HTML_H
 
-void pdf_enable_js(fz_context *ctx, pdf_document *doc);
-void pdf_disable_js(fz_context *ctx, pdf_document *doc);
-int pdf_js_supported(fz_context *ctx, pdf_document *doc);
-void pdf_drop_js(fz_context *ctx, pdf_js *js);
+#include "mupdf/fitz/system.h"
+#include "mupdf/fitz/context.h"
+#include "mupdf/fitz/document.h"
 
-void pdf_js_event_init(pdf_js *js, pdf_obj *target, const char *value, int willCommit);
-int pdf_js_event_result(pdf_js *js);
-int pdf_js_event_result_validate(pdf_js *js, char **newvalue);
-char *pdf_js_event_value(pdf_js *js);
-void pdf_js_event_init_keystroke(pdf_js *js, pdf_obj *target, pdf_keystroke_event *evt);
-int pdf_js_event_result_keystroke(pdf_js *js, pdf_keystroke_event *evt);
+/*
+	HTML types required
+*/
+typedef struct fz_html_s fz_html;
+typedef struct fz_html_font_set_s fz_html_font_set;
 
-void pdf_js_execute(pdf_js *js, const char *name, const char *code, char **result);
+typedef struct
+{
+	const char *format_name;
+	fz_buffer *(*convert_to_html)(fz_context *ctx, fz_html_font_set *set, fz_buffer *buf, fz_archive *dir, const char *user_css);
+	int try_xml;
+	int try_html5;
+	int patch_mobi;
+} fz_htdoc_format_t;
 
-#endif
+fz_document *fz_htdoc_open_document_with_buffer(fz_context *ctx, fz_archive *dir, fz_buffer *buf, const fz_htdoc_format_t *format);
+
+fz_document *fz_htdoc_open_document_with_stream_and_dir(fz_context *ctx, fz_stream *stm, fz_archive *dir, const fz_htdoc_format_t *format);
+
+
+
+#endif /* MUPDF_HTML_HTML_H */

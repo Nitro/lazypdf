@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -17,8 +17,8 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_FITZ_UTIL_H
 #define MUPDF_FITZ_UTIL_H
@@ -30,6 +30,9 @@
 #include "mupdf/fitz/pixmap.h"
 #include "mupdf/fitz/structured-text.h"
 #include "mupdf/fitz/buffer.h"
+#include "mupdf/fitz/xml.h"
+#include "mupdf/fitz/archive.h"
+#include "mupdf/fitz/display-list.h"
 
 /**
 	Create a display list.
@@ -72,6 +75,8 @@ fz_pixmap *fz_new_pixmap_from_page_with_separations(fz_context *ctx, fz_page *pa
 fz_pixmap *fz_new_pixmap_from_page_number_with_separations(fz_context *ctx, fz_document *doc, int number, fz_matrix ctm, fz_colorspace *cs, fz_separations *seps, int alpha);
 fz_pixmap *fz_new_pixmap_from_page_contents_with_separations(fz_context *ctx, fz_page *page, fz_matrix ctm, fz_colorspace *cs, fz_separations *seps, int alpha);
 
+fz_pixmap *fz_fill_pixmap_from_display_list(fz_context *ctx, fz_display_list *list, fz_matrix ctm, fz_pixmap *pix);
+
 /**
 	Extract text from page.
 
@@ -95,36 +100,38 @@ fz_buffer *fz_new_buffer_from_display_list(fz_context *ctx, fz_display_list *lis
 	Record the hits in the hit_bbox array and return the number of
 	hits. Will stop looking once it has filled hit_max rectangles.
 */
-int fz_search_page(fz_context *ctx, fz_page *page, const char *needle, fz_quad *hit_bbox, int hit_max);
-int fz_search_page_number(fz_context *ctx, fz_document *doc, int number, const char *needle, fz_quad *hit_bbox, int hit_max);
-int fz_search_chapter_page_number(fz_context *ctx, fz_document *doc, int chapter, int page, const char *needle, fz_quad *hit_bbox, int hit_max);
-int fz_search_display_list(fz_context *ctx, fz_display_list *list, const char *needle, fz_quad *hit_bbox, int hit_max);
+int fz_search_page(fz_context *ctx, fz_page *page, const char *needle, int *hit_mark, fz_quad *hit_bbox, int hit_max);
+int fz_search_page_number(fz_context *ctx, fz_document *doc, int number, const char *needle, int *hit_mark, fz_quad *hit_bbox, int hit_max);
+int fz_search_chapter_page_number(fz_context *ctx, fz_document *doc, int chapter, int page, const char *needle, int *hit_mark, fz_quad *hit_bbox, int hit_max);
+int fz_search_display_list(fz_context *ctx, fz_display_list *list, const char *needle, int *hit_mark, fz_quad *hit_bbox, int hit_max);
 
 /**
 	Parse an SVG document into a display-list.
 */
-fz_display_list *fz_new_display_list_from_svg(fz_context *ctx, fz_buffer *buf, const char *base_uri, fz_archive *zip, float *w, float *h);
+fz_display_list *fz_new_display_list_from_svg(fz_context *ctx, fz_buffer *buf, const char *base_uri, fz_archive *dir, float *w, float *h);
 
 /**
 	Create a scalable image from an SVG document.
 */
-fz_image *fz_new_image_from_svg(fz_context *ctx, fz_buffer *buf, const char *base_uri, fz_archive *zip);
+fz_image *fz_new_image_from_svg(fz_context *ctx, fz_buffer *buf, const char *base_uri, fz_archive *dir);
 
 /**
 	Parse an SVG document into a display-list.
 */
-fz_display_list *fz_new_display_list_from_svg_xml(fz_context *ctx, fz_xml_doc *xmldoc, fz_xml *xml, const char *base_uri, fz_archive *zip, float *w, float *h);
+fz_display_list *fz_new_display_list_from_svg_xml(fz_context *ctx, fz_xml_doc *xmldoc, fz_xml *xml, const char *base_uri, fz_archive *dir, float *w, float *h);
 
 /**
 	Create a scalable image from an SVG document.
 */
-fz_image *fz_new_image_from_svg_xml(fz_context *ctx, fz_xml_doc *xmldoc, fz_xml *xml, const char *base_uri, fz_archive *zip);
+fz_image *fz_new_image_from_svg_xml(fz_context *ctx, fz_xml_doc *xmldoc, fz_xml *xml, const char *base_uri, fz_archive *dir);
 
 /**
 	Write image as a data URI (for HTML and SVG output).
 */
 void fz_write_image_as_data_uri(fz_context *ctx, fz_output *out, fz_image *image);
 void fz_write_pixmap_as_data_uri(fz_context *ctx, fz_output *out, fz_pixmap *pixmap);
+void fz_append_image_as_data_uri(fz_context *ctx, fz_buffer *out, fz_image *image);
+void fz_append_pixmap_as_data_uri(fz_context *ctx, fz_buffer *out, fz_pixmap *pixmap);
 
 /**
 	Use text extraction to convert the input document into XHTML,

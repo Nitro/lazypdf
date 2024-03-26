@@ -17,11 +17,14 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_PKCS7_OPENSSL_H
 #define MUPDF_PKCS7_OPENSSL_H
+
+#include "mupdf/pdf/document.h"
+#include "mupdf/pdf/form.h"
 
 /* This an example pkcs7 implementation using openssl. These are the types of functions that you
  * will likely need to sign documents and check signatures within documents. In particular, to

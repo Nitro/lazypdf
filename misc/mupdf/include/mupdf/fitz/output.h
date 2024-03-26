@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -17,8 +17,8 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_FITZ_OUTPUT_H
 #define MUPDF_FITZ_OUTPUT_H
@@ -54,7 +54,7 @@ typedef void (fz_output_write_fn)(fz_context *ctx, void *state, const void *data
 
 	state: The output stream state to seek within.
 
-	offset, whence: as defined for fs_seek_output.
+	offset, whence: as defined for fz_seek().
 */
 typedef void (fz_output_seek_fn)(fz_context *ctx, void *state, int64_t offset, int whence);
 
@@ -110,6 +110,10 @@ struct fz_output
 	fz_stream_from_output_fn *as_stream;
 	fz_truncate_fn *truncate;
 	char *bp, *wp, *ep;
+	/* If buffered is non-zero, then we have that many
+	 * bits (1-7) waiting to be written in bits. */
+	int buffered;
+	int bits;
 };
 
 /**
@@ -253,6 +257,7 @@ void fz_truncate_output(fz_context *, fz_output *);
 	size: Size of data to write in bytes.
 */
 void fz_write_data(fz_context *ctx, fz_output *out, const void *data, size_t size);
+void fz_write_buffer(fz_context *ctx, fz_output *out, fz_buffer *data);
 
 /**
 	Write a string. Does not write zero terminator.
@@ -293,8 +298,19 @@ void fz_write_base64(fz_context *ctx, fz_output *out, const unsigned char *data,
 void fz_write_base64_buffer(fz_context *ctx, fz_output *out, fz_buffer *data, int newline);
 
 /**
+	Write num_bits of data to the end of the output stream, assumed to be packed
+	most significant bits first.
+*/
+void fz_write_bits(fz_context *ctx, fz_output *out, unsigned int data, int num_bits);
+
+/**
+	Sync to byte boundary after writing bits.
+*/
+void fz_write_bits_sync(fz_context *ctx, fz_output *out);
+
+/**
 	Our customised 'printf'-like string formatter.
-	Takes %c, %d, %s, %u, %x, as usual.
+	Takes %c, %d, %s, %u, %x, %X as usual.
 	Modifiers are not supported except for zero-padding ints (e.g.
 	%02d, %03u, %04x, etc).
 	%g output in "as short as possible hopefully lossless
@@ -306,8 +322,8 @@ void fz_write_base64_buffer(fz_context *ctx, fz_output *out, fz_buffer *data, in
 	%P outputs a fz_point*.
 	%n outputs a PDF name (with appropriate escaping).
 	%q and %( output escaped strings in C/PDF syntax.
-	%l{d,u,x} indicates that the values are int64_t.
-	%z{d,u,x} indicates that the value is a size_t.
+	%l{d,u,x,X} indicates that the values are int64_t.
+	%z{d,u,x,X} indicates that the value is a size_t.
 
 	user: An opaque pointer that is passed to the emit function.
 
