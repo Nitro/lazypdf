@@ -249,6 +249,10 @@ save_to_png_output save_to_png(save_to_png_input input) {
 			}
 		}
 
+		// Update the scale_factor based on the DPI.
+		float scale_dpi = ((float)(input.dpi - 72) / 72) * 100;
+		scale_factor = scale_factor * (1 + (scale_dpi / 100));
+
 		fz_matrix ctm = fz_scale(scale_factor, scale_factor);
 		bounds = fz_transform_rect(bounds, ctm);
 		fz_irect bbox = fz_round_rect(bounds);
