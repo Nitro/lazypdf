@@ -33,8 +33,6 @@ jobs:
         include:
           - alias: linux
             os: ubuntu-latest
-          - alias: macos
-            os: macos-latest
     runs-on: ${{ matrix.os }}
     needs: version
 
