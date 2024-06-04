@@ -17,6 +17,7 @@ typedef struct {
 	int page;
 	int width;
 	float scale;
+	int dpi;
 	char *payload;
 	size_t payload_length;
 	fz_cookie *cookie;

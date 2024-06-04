@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -19,10 +18,10 @@ func TestSaveToPNGOK(t *testing.T) {
 		defer func() { require.NoError(t, file.Close()) }()
 
 		buf := bytes.NewBuffer([]byte{})
-		err = SaveToPNG(context.Background(), i, 0, 0, file, buf)
+		err = SaveToPNG(context.Background(), i, 0, 0, 0, file, buf)
 		require.NoError(t, err)
 
-		expectedPage, err := ioutil.ReadFile(fmt.Sprintf("testdata/sample_page%d.png", i))
+		expectedPage, err := os.ReadFile(fmt.Sprintf("testdata/sample_page%d.png", i))
 		require.NoError(t, err)
 		resultPage, err := io.ReadAll(buf)
 		require.NoError(t, err)
@@ -35,7 +34,7 @@ func TestSaveToPNGFail(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, file.Close()) }()
 
-	err = SaveToPNG(context.Background(), 0, 0, 0, file, bytes.NewBuffer([]byte{}))
+	err = SaveToPNG(context.Background(), 0, 0, 0, 0, file, bytes.NewBuffer([]byte{}))
 	require.Error(t, err)
 	require.Equal(t, "failure at the C/MuPDF layer: no objects found", err.Error())
 }
@@ -75,14 +74,14 @@ func BenchmarkSaveToPNGPage11(b *testing.B) { benchmarkSaveToPNGRunner(11, b) }
 func BenchmarkSaveToPNGPage12(b *testing.B) { benchmarkSaveToPNGRunner(12, b) }
 
 func benchmarkSaveToPNGRunner(page uint16, b *testing.B) {
-	buf, err := ioutil.ReadFile("testdata/sample.pdf")
+	buf, err := os.ReadFile("testdata/sample.pdf")
 	require.NoError(b, err)
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		input := bytes.NewBuffer(buf)
 		output := bytes.NewBuffer([]byte{})
-		err := SaveToPNG(context.Background(), page, 0, 0, input, output)
+		err := SaveToPNG(context.Background(), page, 0, 0, 0, input, output)
 		require.NoError(b, err)
 	}
 }
