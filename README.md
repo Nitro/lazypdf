@@ -1,5 +1,5 @@
 # LazyPDF
-This is a rasterizing engine for PDF documents built around [MuPDF][mupdf] and [jemalloc][jemalloc]. Works on Linux and macOS.
+This is a rasterizing engine for PDF documents built around [MuPDF][mupdf] and [jemalloc][jemalloc].
 <a target="_blank" href="https://icons8.com/icon/43610/copy">
   <img src="misc/assets/icon.png" align="right" height="96px" width="96px" />
 </a>
@@ -15,6 +15,12 @@ go build
 ## Testing
 ```golang
 go test -race
+```
+
+## Working with macOS
+Unfortunately this repository does not supports macOS. In order to run and test the code on macOS, run the code inside a Docker container:
+```shell
+docker run --rm -it --platform linux/amd64 -v ${PWD}:/code -w /code golang:1.22.3
 ```
 
 ## Updating the native libraries
