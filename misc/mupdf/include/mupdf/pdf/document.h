@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2023 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -17,13 +17,18 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_PDF_DOCUMENT_H
 #define MUPDF_PDF_DOCUMENT_H
 
 #include "mupdf/fitz/export.h"
+#include "mupdf/fitz/document.h"
+#include "mupdf/fitz/hash.h"
+#include "mupdf/fitz/stream.h"
+#include "mupdf/fitz/xml.h"
+#include "mupdf/pdf/object.h"
 
 typedef struct pdf_xref pdf_xref;
 typedef struct pdf_ocg_descriptor pdf_ocg_descriptor;
@@ -31,6 +36,7 @@ typedef struct pdf_ocg_descriptor pdf_ocg_descriptor;
 typedef struct pdf_page pdf_page;
 typedef struct pdf_annot pdf_annot;
 typedef struct pdf_js pdf_js;
+typedef struct pdf_document pdf_document;
 
 enum
 {
@@ -72,6 +78,76 @@ typedef void (pdf_doc_event_cb)(fz_context *ctx, pdf_document *doc, pdf_doc_even
 	the data provided to the event callback pdf_doc_event_cb.
 */
 typedef void (pdf_free_doc_event_data_cb)(fz_context *ctx, void *data);
+
+typedef struct pdf_js_console pdf_js_console;
+
+/*
+	Callback called when the console is dropped because it
+	is being replaced or the javascript is being disabled
+	by a call to pdf_disable_js().
+*/
+typedef void (pdf_js_console_drop_cb)(pdf_js_console *console, void *user);
+
+/*
+	Callback signalling that a piece of javascript is asking
+	the javascript console to be displayed.
+*/
+typedef void (pdf_js_console_show_cb)(void *user);
+
+/*
+	Callback signalling that a piece of javascript is asking
+	the javascript console to be hidden.
+*/
+typedef void (pdf_js_console_hide_cb)(void *user);
+
+/*
+	Callback signalling that a piece of javascript is asking
+	the javascript console to remove all its contents.
+*/
+typedef void (pdf_js_console_clear_cb)(void *user);
+
+/*
+	Callback signalling that a piece of javascript is appending
+	the given message to the javascript console contents.
+*/
+typedef void (pdf_js_console_write_cb)(void *user, const char *msg);
+
+/*
+	The callback functions relating to a javascript console.
+*/
+typedef struct pdf_js_console {
+	pdf_js_console_drop_cb *drop;
+	pdf_js_console_show_cb *show;
+	pdf_js_console_hide_cb *hide;
+	pdf_js_console_clear_cb *clear;
+	pdf_js_console_write_cb *write;
+} pdf_js_console;
+
+/*
+	Retrieve the currently set javascript console, or NULL
+	if none is set.
+*/
+pdf_js_console *pdf_js_get_console(fz_context *ctx, pdf_document *doc);
+
+/*
+	Set a new javascript console.
+
+	console: A set of callback functions informing about
+	what pieces of executed js is trying to do
+	to the js console. The caller transfers ownership of
+	console when calling pdf_js_set_console(). Once it and
+	the corresponding user pointer are no longer needed
+	console->drop() will be called passing both the console
+	and the user pointer.
+
+	user: Opaque data that will be passed unchanged to all
+	js console callbacks when called. The caller ensures
+	that this is valid until either the js console is
+	replaced by calling pdf_js_set_console() again with a
+	new console, or pdf_disable_js() is called. In either
+	case the caller to ensures that the user data is freed.
+*/
+void pdf_js_set_console(fz_context *ctx, pdf_document *doc, pdf_js_console *console, void *user);
 
 /*
 	Open a PDF document.
@@ -146,6 +222,10 @@ int pdf_lookup_metadata(fz_context *ctx, pdf_document *doc, const char *key, cha
 
 fz_outline *pdf_load_outline(fz_context *ctx, pdf_document *doc);
 
+fz_outline_iterator *pdf_new_outline_iterator(fz_context *ctx, pdf_document *doc);
+
+void pdf_invalidate_xfa(fz_context *ctx, pdf_document *doc);
+
 /*
 	Get the number of layer configurations defined in this document.
 
@@ -153,8 +233,13 @@ fz_outline *pdf_load_outline(fz_context *ctx, pdf_document *doc);
 */
 int pdf_count_layer_configs(fz_context *ctx, pdf_document *doc);
 
-void pdf_invalidate_xfa(fz_context *ctx, pdf_document *doc);
-
+/*
+	Configure visibility of individual layers in this document.
+*/
+int pdf_count_layers(fz_context *ctx, pdf_document *doc);
+const char *pdf_layer_name(fz_context *ctx, pdf_document *doc, int layer);
+int pdf_layer_is_enabled(fz_context *ctx, pdf_document *doc, int layer);
+void pdf_enable_layer(fz_context *ctx, pdf_document *doc, int layer, int enabled);
 
 typedef struct
 {
@@ -318,6 +403,7 @@ struct pdf_document
 	fz_stream *file;
 
 	int version;
+	int is_fdf;
 	int64_t startxref;
 	int64_t file_size;
 	pdf_crypt *crypt;
@@ -339,14 +425,17 @@ struct pdf_document
 	pdf_xref *saved_xref_sections;
 	int *xref_index;
 	int save_in_progress;
-	int has_xref_streams;
-	int has_old_style_xrefs;
+	int last_xref_was_old_style;
 	int has_linearization_object;
 
-	int rev_page_count;
+	int map_page_count;
 	pdf_rev_page_map *rev_page_map;
+	pdf_obj **fwd_page_map;
+	int page_tree_broken;
 
 	int repair_attempted;
+	int repair_in_progress;
+	int non_structural_change; /* True if we are modifying the document in a way that does not change the (page) structure */
 
 	/* State indicating which file parsing method we are using */
 	int file_reading_linearly;
@@ -488,6 +577,7 @@ void pdf_graft_mapped_page(fz_context *ctx, pdf_graft_map *map, int page_to, pdf
 	pdf operations, together with a set of resources. This
 	sequence/set pair can then be used as the basis for
 	adding a page to the document (see pdf_add_page).
+	Returns a kept reference.
 
 	doc: The document for which these are intended.
 
@@ -544,9 +634,11 @@ pdf_obj *pdf_add_page(fz_context *ctx, pdf_document *doc, fz_rect mediabox, int 
 
 	doc: The document to insert into.
 
-	at: The page number to insert at. 0 inserts at the start.
-	negative numbers, or INT_MAX insert at the end. Otherwise
-	n inserts after page n.
+	at: The page number to insert at (pages numbered from 0).
+	0 <= n <= page_count inserts before page n. Negative numbers
+	or INT_MAX are treated as page count, and insert at the end.
+	0 inserts at the start. All existing pages are after the
+	insertion point are shuffled up.
 
 	page: The page to insert.
 */
@@ -577,6 +669,24 @@ void pdf_delete_page(fz_context *ctx, pdf_document *doc, int number);
 */
 void pdf_delete_page_range(fz_context *ctx, pdf_document *doc, int start, int end);
 
+/*
+	Get page label (string) from a page number (index).
+*/
+void pdf_page_label(fz_context *ctx, pdf_document *doc, int page, char *buf, size_t size);
+void pdf_page_label_imp(fz_context *ctx, fz_document *doc, int chapter, int page, char *buf, size_t size);
+
+typedef enum {
+	PDF_PAGE_LABEL_NONE = 0,
+	PDF_PAGE_LABEL_DECIMAL = 'D',
+	PDF_PAGE_LABEL_ROMAN_UC = 'R',
+	PDF_PAGE_LABEL_ROMAN_LC = 'r',
+	PDF_PAGE_LABEL_ALPHA_UC = 'A',
+	PDF_PAGE_LABEL_ALPHA_LC = 'a',
+} pdf_page_label_style;
+
+void pdf_set_page_labels(fz_context *ctx, pdf_document *doc, int index, pdf_page_label_style style, const char *prefix, int start);
+void pdf_delete_page_labels(fz_context *ctx, pdf_document *doc, int index);
+
 fz_text_language pdf_document_language(fz_context *ctx, pdf_document *doc);
 void pdf_set_document_language(fz_context *ctx, pdf_document *doc, fz_text_language lang);
 
@@ -605,6 +715,9 @@ typedef struct
 	char opwd_utf8[128]; /* Owner password. */
 	char upwd_utf8[128]; /* User password. */
 	int do_snapshot; /* Do not use directly. Use the snapshot functions. */
+	int do_preserve_metadata; /* When cleaning, preserve metadata unchanged. */
+	int do_use_objstms; /* Use objstms if possible */
+	int compression_effort; /* 0 for default. 100 = max, 1 = min. */
 } pdf_write_options;
 
 FZ_DATA extern const pdf_write_options pdf_default_write_options;
@@ -682,5 +795,28 @@ void pdf_load_journal(fz_context *ctx, pdf_document *doc, const char *filename);
 	does not match. Will throw on a corrupted journal.
 */
 void pdf_read_journal(fz_context *ctx, pdf_document *doc, fz_stream *stm);
+
+/*
+	Minimize the memory used by a document.
+
+	We walk the in memory xref tables, evicting the PDF objects
+	therein that aren't in use.
+
+	This reduces the current memory use, but any subsequent use
+	of these objects will load them back into memory again.
+*/
+void pdf_minimize_document(fz_context *ctx, pdf_document *doc);
+
+/*
+	Map a pdf object representing a structure tag through
+	an optional role_map and convert to an fz_structure.
+*/
+fz_structure pdf_structure_type(fz_context *ctx, pdf_obj *role_map, pdf_obj *tag);
+
+/*
+	Run the document structure to a device.
+*/
+void pdf_run_document_structure(fz_context *ctx, pdf_document *doc, fz_device *dev, fz_cookie *cookie);
+
 
 #endif
