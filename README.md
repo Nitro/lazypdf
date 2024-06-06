@@ -20,7 +20,7 @@ go test -race
 ## Working with macOS
 Unfortunately this repository does not supports macOS. In order to run and test the code on macOS, run the code inside a Docker container:
 ```shell
-docker run --rm -it --platform linux/amd64 -v ${PWD}:/code -w /code golang:1.22.3
+docker run --rm -it --platform linux/amd64 -v ${PWD}:/code -w /code golang:1.22.4
 ```
 
 ## Updating the native libraries
