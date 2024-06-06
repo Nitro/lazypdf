@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -17,8 +17,8 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_FITZ_SYSTEM_H
 #define MUPDF_FITZ_SYSTEM_H
@@ -165,9 +165,6 @@ static __inline int signbit(double x)
 
 #ifdef _WIN32
 
-char *fz_utf8_from_wchar(const wchar_t *s);
-wchar_t *fz_wchar_from_utf8(const char *s);
-
 /* really a FILE* but we don't want to include stdio.h here */
 void *fz_fopen_utf8(const char *name, const char *mode);
 int fz_remove_utf8(const char *name);
@@ -182,18 +179,30 @@ void fz_free_argv(int argc, char **argv);
 #define S_ISDIR(mode) ((mode) & S_IFDIR)
 #endif
 
+int64_t fz_stat_ctime(const char *path);
+int64_t fz_stat_mtime(const char *path);
+int fz_mkdir(char *path);
+
+
 /* inline is standard in C++. For some compilers we can enable it within
- * C too. */
+ * C too. Some compilers think they know better than we do about when
+ * to actually honour inline (particularly for large functions); use
+ * fz_forceinline to kick them into really inlining. */
 
 #ifndef __cplusplus
 #if defined (__STDC_VERSION_) && (__STDC_VERSION__ >= 199901L) /* C99 */
 #elif defined(_MSC_VER) && (_MSC_VER >= 1500) /* MSVC 9 or newer */
 #define inline __inline
+#define fz_forceinline __forceinline
 #elif defined(__GNUC__) && (__GNUC__ >= 3) /* GCC 3 or newer */
 #define inline __inline
 #else /* Unknown or ancient */
 #define inline
 #endif
+#endif
+
+#ifndef fz_forceinline
+#define fz_forceinline inline
 #endif
 
 /* restrict is standard in C99, but not in all C++ compilers. */
@@ -399,6 +408,10 @@ static inline float my_sinf(float x)
 	x -= xn;
 	xn *= x2 / 72.0f;
 	x += xn;
+	if (x > 1)
+		x = 1;
+	else if (x < -1)
+		x = -1;
 	return x;
 }
 

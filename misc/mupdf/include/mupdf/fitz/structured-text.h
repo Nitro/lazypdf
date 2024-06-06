@@ -17,20 +17,21 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_FITZ_STRUCTURED_TEXT_H
 #define MUPDF_FITZ_STRUCTURED_TEXT_H
 
 #include "mupdf/fitz/system.h"
+#include "mupdf/fitz/types.h"
 #include "mupdf/fitz/context.h"
 #include "mupdf/fitz/geometry.h"
 #include "mupdf/fitz/font.h"
 #include "mupdf/fitz/image.h"
 #include "mupdf/fitz/output.h"
 #include "mupdf/fitz/device.h"
-#include "mupdf/fitz/document.h"
+#include "mupdf/fitz/pool.h"
 
 /**
 	Simple text layout (for use with annotation editing primarily).
@@ -132,6 +133,7 @@ enum
 	FZ_STEXT_DEHYPHENATE = 16,
 	FZ_STEXT_PRESERVE_SPANS = 32,
 	FZ_STEXT_MEDIABOX_CLIP = 64,
+	FZ_STEXT_USE_CID_FOR_UNKNOWN_UNICODE = 128,
 };
 
 /**
@@ -184,7 +186,8 @@ struct fz_stext_line
 */
 struct fz_stext_char
 {
-	int c;
+	int c; /* unicode character value */
+	int bidi; /* even for LTR, odd for RTL */
 	int color; /* sRGB hex color */
 	fz_point origin;
 	fz_quad quad;
@@ -244,7 +247,7 @@ void fz_print_stext_page_as_text(fz_context *ctx, fz_output *out, fz_stext_page 
 	NOTE: This is an experimental interface and subject to change
 	without notice.
 */
-int fz_search_stext_page(fz_context *ctx, fz_stext_page *text, const char *needle, fz_quad *quads, int max_quads);
+int fz_search_stext_page(fz_context *ctx, fz_stext_page *text, const char *needle, int *hit_mark, fz_quad *hit_bbox, int hit_max);
 
 /**
 	Return a list of quads to highlight lines inside the selection
@@ -280,11 +283,12 @@ char *fz_copy_selection(fz_context *ctx, fz_stext_page *page, fz_point a, fz_poi
 char *fz_copy_rectangle(fz_context *ctx, fz_stext_page *page, fz_rect area, int crlf);
 
 /**
-	Options for creating a pixmap and draw device.
+	Options for creating structured text.
 */
 typedef struct
 {
 	int flags;
+	float scale;
 } fz_stext_options;
 
 /**
@@ -341,6 +345,9 @@ fz_device *fz_new_stext_device(fz_context *ctx, fz_stext_page *page, const fz_st
 	the languages/scripts that should be used for OCR (e.g.
 	"eng,ara").
 
+	datadir: NULL (for ""), or a pointer to a path string otherwise
+	provided to Tesseract in the TESSDATA_PREFIX environment variable.
+
 	progress: NULL, or function to be called periodically to indicate
 	progress. Return 0 to continue, or 1 to cancel. progress_arg is
 	returned as the void *. The int is a value between 0 and 100 to
@@ -350,7 +357,7 @@ fz_device *fz_new_stext_device(fz_context *ctx, fz_stext_page *page, const fz_st
 	function.
 */
 fz_device *fz_new_ocr_device(fz_context *ctx, fz_device *target, fz_matrix ctm, fz_rect mediabox, int with_list, const char *language,
-			int (*progress)(fz_context *, void *, int), void *progress_arg);
+			const char *datadir, int (*progress)(fz_context *, void *, int), void *progress_arg);
 
 fz_document *fz_open_reflowed_document(fz_context *ctx, fz_document *underdoc, const fz_stext_options *opts);
 

@@ -17,11 +17,14 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_PDF_FORM_H
 #define MUPDF_PDF_FORM_H
+
+#include "mupdf/fitz/display-list.h"
+#include "mupdf/pdf/document.h"
 
 /* Types of widget */
 enum pdf_widget_type
@@ -151,13 +154,14 @@ void pdf_calculate_form(fz_context *ctx, pdf_document *doc);
 void pdf_reset_form(fz_context *ctx, pdf_document *doc, pdf_obj *fields, int exclude);
 
 int pdf_field_type(fz_context *ctx, pdf_obj *field);
+const char *pdf_field_type_string(fz_context *ctx, pdf_obj *field);
 int pdf_field_flags(fz_context *ctx, pdf_obj *field);
 
 /*
 	Retrieve the name for a field as a C string that
 	must be freed by the caller.
 */
-char *pdf_field_name(fz_context *ctx, pdf_obj *field);
+char *pdf_load_field_name(fz_context *ctx, pdf_obj *field);
 const char *pdf_field_value(fz_context *ctx, pdf_obj *field);
 void pdf_create_field_name(fz_context *ctx, pdf_document *doc, const char *prefix, char *buf, size_t len);
 
@@ -319,14 +323,6 @@ fz_pixmap *pdf_preview_signature_as_pixmap(fz_context *ctx,
 	const char *reason,
 	const char *location);
 
-/*
-	check a signature's certificate chain and digest
-
-	This is a helper function defined to provide compatibility with older
-	versions of mupdf
-*/
-int pdf_check_signature(fz_context *ctx, pdf_pkcs7_verifier *verifier, pdf_document *doc, pdf_obj *signature, char *ebuf, size_t ebufsize);
-
 void pdf_drop_signer(fz_context *ctx, pdf_pkcs7_signer *signer);
 void pdf_drop_verifier(fz_context *ctx, pdf_pkcs7_verifier *verifier);
 
@@ -374,5 +370,11 @@ void pdf_annot_event_page_open(fz_context *ctx, pdf_annot *annot);
 void pdf_annot_event_page_close(fz_context *ctx, pdf_annot *annot);
 void pdf_annot_event_page_visible(fz_context *ctx, pdf_annot *annot);
 void pdf_annot_event_page_invisible(fz_context *ctx, pdf_annot *annot);
+
+/*
+ * Bake appearances of annotations and/or widgets into static page content,
+ * and remove the corresponding interactive PDF objects.
+ */
+void pdf_bake_document(fz_context *ctx, pdf_document *doc, int bake_annots, int bake_widgets);
 
 #endif

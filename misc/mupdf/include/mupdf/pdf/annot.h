@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2023 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -17,11 +17,19 @@
 //
 // Alternative licensing terms are available from the licensor.
 // For commercial licensing, see <https://www.artifex.com/> or contact
-// Artifex Software, Inc., 1305 Grant Avenue - Suite 200, Novato,
-// CA 94945, U.S.A., +1(415)492-9861, for further information.
+// Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
+// CA 94129, USA, for further information.
 
 #ifndef MUPDF_PDF_ANNOT_H
 #define MUPDF_PDF_ANNOT_H
+
+#include "mupdf/fitz/display-list.h"
+#include "mupdf/fitz/stream.h"
+#include "mupdf/fitz/structured-text.h"
+#include "mupdf/pdf/object.h"
+#include "mupdf/pdf/page.h"
+
+typedef struct pdf_annot pdf_annot;
 
 enum pdf_annot_type
 {
@@ -252,11 +260,75 @@ void pdf_walk_tree(fz_context *ctx, pdf_obj *tree, pdf_obj *kid_name,
 	Resolve a link within a document.
 */
 int pdf_resolve_link(fz_context *ctx, pdf_document *doc, const char *uri, float *xp, float *yp);
+fz_link_dest pdf_resolve_link_dest(fz_context *ctx, pdf_document *doc, const char *uri);
+
+/*
+	Create an action object given a link URI. The action will
+	be a GoTo or URI action depending on whether the link URI
+	specifies a document internal or external destination.
+*/
+pdf_obj *pdf_new_action_from_link(fz_context *ctx, pdf_document *doc, const char *uri);
+
+/*
+	Create a destination object given a link URI expected to adhere
+	to the Adobe specification "Parameters for Opening PDF files"
+	from the Adobe Acrobat SDK. The resulting destination object
+	will either be a PDF string, or a PDF array referring to a page
+	and suitable zoom level settings. In the latter case the page
+	can be referred to by PDF object number or by page number, this
+	is controlled by the is_remote argument. For remote destinations
+	it is not possible to refer to the page by object number, so
+	page numbers are used instead.
+*/
+pdf_obj *pdf_new_dest_from_link(fz_context *ctx, pdf_document *doc, const char *uri, int is_remote);
+
+/*
+	Create a link URI string according to the Adobe specification
+	"Parameters for Opening PDF files" from the Adobe Acrobat SDK,
+	version 8.1, which can, at the time of writing, be found here:
+
+	https://web.archive.org/web/20170921000830/http://www.adobe.com/content/dam/Adobe/en/devnet/acrobat/pdfs/pdf_open_parameters.pdf
+
+	The resulting string must be freed by the caller.
+*/
+char *pdf_new_uri_from_explicit_dest(fz_context *ctx, fz_link_dest dest);
+
+/*
+	Create a remote link URI string according to the Adobe specification
+	"Parameters for Opening PDF files" from the Adobe Acrobat SDK,
+	version 8.1, which can, at the time of writing, be found here:
+
+	https://web.archive.org/web/20170921000830/http://www.adobe.com/content/dam/Adobe/en/devnet/acrobat/pdfs/pdf_open_parameters.pdf
+
+	The file: URI scheme is used in the resulting URI if the remote document
+	is specified by a system independent path (already taking the recommendations
+	in table 3.40 of the PDF 1.7 specification into account), and either a
+	destination name or a page number and zoom level are appended:
+	file:///path/doc.pdf#page=42&view=FitV,100
+	file:///path/doc.pdf#nameddest=G42.123456
+
+	If a URL is used to specify the remote document, then its scheme takes
+	precedence and either a destination name or a page number and zoom level
+	are appended:
+	ftp://example.com/alpha.pdf#page=42&view=Fit
+	https://example.com/bravo.pdf?query=parameter#page=42&view=Fit
+
+	The resulting string must be freed by the caller.
+*/
+char *pdf_append_named_dest_to_uri(fz_context *ctx, const char *url, const char *name);
+char *pdf_append_explicit_dest_to_uri(fz_context *ctx, const char *url, fz_link_dest dest);
+char *pdf_new_uri_from_path_and_named_dest(fz_context *ctx, const char *path, const char *name);
+char *pdf_new_uri_from_path_and_explicit_dest(fz_context *ctx, const char *path, fz_link_dest dest);
 
 /*
 	Create transform to fit appearance stream to annotation Rect
 */
 fz_matrix pdf_annot_transform(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Create a new link object.
+*/
+fz_link *pdf_new_link(fz_context *ctx, pdf_page *page, fz_rect rect, const char *uri, pdf_obj *obj);
 
 /*
 	create a new annotation of the specified type on the
@@ -270,6 +342,26 @@ pdf_annot *pdf_create_annot_raw(fz_context *ctx, pdf_page *page, enum pdf_annot_
 	structure is owned by the page and does not need to be freed.
 */
 fz_link *pdf_create_link(fz_context *ctx, pdf_page *page, fz_rect bbox, const char *uri);
+
+/*
+	delete an existing link from the specified page.
+*/
+void pdf_delete_link(fz_context *ctx, pdf_page *page, fz_link *link);
+
+enum pdf_border_style
+{
+	PDF_BORDER_STYLE_SOLID = 0,
+	PDF_BORDER_STYLE_DASHED,
+	PDF_BORDER_STYLE_BEVELED,
+	PDF_BORDER_STYLE_INSET,
+	PDF_BORDER_STYLE_UNDERLINE,
+};
+
+enum pdf_border_effect
+{
+	PDF_BORDER_EFFECT_NONE = 0,
+	PDF_BORDER_EFFECT_CLOUDY,
+};
 
 /*
 	create a new annotation of the specified type on the
@@ -302,6 +394,11 @@ void pdf_set_annot_popup(fz_context *ctx, pdf_annot *annot, fz_rect rect);
 fz_rect pdf_annot_popup(fz_context *ctx, pdf_annot *annot);
 
 /*
+	Check to see if an annotation has a rect.
+*/
+int pdf_annot_has_rect(fz_context *ctx, pdf_annot *annot);
+
+/*
 	Check to see if an annotation has an ink list.
 */
 int pdf_annot_has_ink_list(fz_context *ctx, pdf_annot *annot);
@@ -332,6 +429,20 @@ int pdf_annot_has_interior_color(fz_context *ctx, pdf_annot *annot);
 int pdf_annot_has_line_ending_styles(fz_context *ctx, pdf_annot *annot);
 
 /*
+	Check to see if an annotation has quadding.
+*/
+int pdf_annot_has_quadding(fz_context *ctx, pdf_annot *annot);
+/*
+	Check to see if an annotation has a border.
+*/
+int pdf_annot_has_border(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Check to see if an annotation has a border effect.
+*/
+int pdf_annot_has_border_effect(fz_context *ctx, pdf_annot *annot);
+
+/*
 	Check to see if an annotation has an icon name.
 */
 int pdf_annot_has_icon_name(fz_context *ctx, pdf_annot *annot);
@@ -358,8 +469,39 @@ fz_rect pdf_annot_rect(fz_context *ctx, pdf_annot *annot);
 
 /*
 	Retrieve the annotation border line width in points.
+	DEPRECATED: Use pdf_annot_border_width instead.
 */
 float pdf_annot_border(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Retrieve the annotation border style.
+ */
+enum pdf_border_style pdf_annot_border_style(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Retrieve the annotation border width in points.
+ */
+float pdf_annot_border_width(fz_context *ctx, pdf_annot *annot);
+
+/*
+	How many items does the annotation border dash pattern have?
+ */
+int pdf_annot_border_dash_count(fz_context *ctx, pdf_annot *annot);
+
+/*
+	How long is dash item i in the annotation border dash pattern?
+ */
+float pdf_annot_border_dash_item(fz_context *ctx, pdf_annot *annot, int i);
+
+/*
+	Retrieve the annotation border effect.
+ */
+enum pdf_border_effect pdf_annot_border_effect(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Retrieve the annotation border effect intensity.
+ */
+float pdf_annot_border_effect_intensity(fz_context *ctx, pdf_annot *annot);
 
 /*
 	Retrieve the annotation opacity. (0 transparent, 1 solid).
@@ -428,14 +570,52 @@ fz_point pdf_annot_ink_list_stroke_vertex(fz_context *ctx, pdf_annot *annot, int
 void pdf_set_annot_flags(fz_context *ctx, pdf_annot *annot, int flags);
 
 /*
+	Set the stamp appearance stream to a custom image.
+	Fits the image to the current Rect, and shrinks the Rect
+	to fit the image aspect ratio.
+*/
+void pdf_set_annot_stamp_image(fz_context *ctx, pdf_annot *annot, fz_image *image);
+
+/*
 	Set the bounding box for an annotation, in doc space.
 */
 void pdf_set_annot_rect(fz_context *ctx, pdf_annot *annot, fz_rect rect);
 
 /*
 	Set the border width for an annotation, in points.
+	DEPRECATED: Use pdf_set_annot_border_width instead.
 */
 void pdf_set_annot_border(fz_context *ctx, pdf_annot *annot, float width);
+
+/*
+	Set the border style for an annotation.
+*/
+void pdf_set_annot_border_style(fz_context *ctx, pdf_annot *annot, enum pdf_border_style style);
+
+/*
+	Set the border width for an annotation in points;
+*/
+void pdf_set_annot_border_width(fz_context *ctx, pdf_annot *annot, float width);
+
+/*
+	Clear the entire border dash pattern for an annotation.
+*/
+void pdf_clear_annot_border_dash(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Add an item to the end of the border dash pattern for an annotation.
+*/
+void pdf_add_annot_border_dash_item(fz_context *ctx, pdf_annot *annot, float length);
+
+/*
+	Set the border effect for an annotation.
+*/
+void pdf_set_annot_border_effect(fz_context *ctx, pdf_annot *annot, enum pdf_border_effect effect);
+
+/*
+	Set the border effect intensity for an annotation.
+*/
+void pdf_set_annot_border_effect_intensity(fz_context *ctx, pdf_annot *annot, float intensity);
 
 /*
 	Set the opacity for an annotation, between 0 (transparent) and 1
@@ -535,6 +715,7 @@ void pdf_set_annot_line_ending_styles(fz_context *ctx, pdf_annot *annot, enum pd
 
 const char *pdf_annot_icon_name(fz_context *ctx, pdf_annot *annot);
 int pdf_annot_is_open(fz_context *ctx, pdf_annot *annot);
+int pdf_annot_is_standard_stamp(fz_context *ctx, pdf_annot *annot);
 
 void pdf_annot_line(fz_context *ctx, pdf_annot *annot, fz_point *a, fz_point *b);
 void pdf_set_annot_line(fz_context *ctx, pdf_annot *annot, fz_point a, fz_point b);
@@ -563,7 +744,21 @@ void pdf_print_default_appearance(fz_context *ctx, char *buf, int nbuf, const ch
 void pdf_annot_default_appearance(fz_context *ctx, pdf_annot *annot, const char **font, float *size, int *n, float color[4]);
 void pdf_set_annot_default_appearance(fz_context *ctx, pdf_annot *annot, const char *font, float size, int n, const float *color);
 
+/*
+ * Request that an appearance stream should be generated for an annotation if none is present.
+ * It will be created in future calls to pdf_update_annot or pdf_update_page.
+ */
+void pdf_annot_request_synthesis(fz_context *ctx, pdf_annot *annot);
+
+/*
+ * Request that an appearance stream should be re-generated for an annotation
+ * the next time pdf_annot_update or pdf_page_update is called.
+ * You usually won't need to call this, because changing any annotation attributes
+ * via the pdf_annot functions will do so automatically.
+ * It will be created in future calls to pdf_update_annot or pdf_update_page.
+ */
 void pdf_annot_request_resynthesis(fz_context *ctx, pdf_annot *annot);
+
 int pdf_annot_needs_resynthesis(fz_context *ctx, pdf_annot *annot);
 void pdf_set_annot_resynthesised(fz_context *ctx, pdf_annot *annot);
 void pdf_dirty_annot(fz_context *ctx, pdf_annot *annot);
@@ -649,18 +844,56 @@ fz_stext_page *pdf_new_stext_page_from_annot(fz_context *ctx, pdf_annot *annot, 
 
 fz_layout_block *pdf_layout_text_widget(fz_context *ctx, pdf_annot *annot);
 
-const char *pdf_guess_mime_type_from_file_name(fz_context *ctx, const char *filename);
-pdf_obj *pdf_embedded_file_stream(fz_context *ctx, pdf_obj *fs);
-const char *pdf_embedded_file_name(fz_context *ctx, pdf_obj *fs);
-const char *pdf_embedded_file_type(fz_context *ctx, pdf_obj *fs);
-int pdf_is_embedded_file(fz_context *ctx, pdf_obj *fs);
-fz_buffer *pdf_load_embedded_file(fz_context *ctx, pdf_obj *fs);
-pdf_obj *pdf_add_embedded_file(fz_context *ctx, pdf_document *doc, const char *filename, const char *mimetype, fz_buffer *contents);
+typedef struct pdf_embedded_file_params pdf_embedded_file_params;
 
-char *pdf_parse_link_dest(fz_context *ctx, pdf_document *doc, pdf_obj *obj);
-char *pdf_parse_link_action(fz_context *ctx, pdf_document *doc, pdf_obj *obj, int pagenum);
+/*
+	Parameters for and embedded file. Obtained through
+	pdf_get_embedded_file_params(). The creation and
+	modification date fields are < 0 if unknown.
+*/
+struct pdf_embedded_file_params {
+	const char *filename;
+	const char *mimetype;
+	int size;
+	int64_t created;
+	int64_t modified;
+};
+
+/*
+	Check if pdf object is a file specification.
+*/
+int pdf_is_embedded_file(fz_context *ctx, pdf_obj *fs);
+
+/*
+	Add an embedded file to the document. This can later
+	be passed e.g. to pdf_annot_set_filespec(). If unknown,
+	supply NULL for MIME type and -1 for the date arguments.
+	If a checksum is added it can later be verified by calling
+	pdf_verify_embedded_file_checksum().
+*/
+pdf_obj *pdf_add_embedded_file(fz_context *ctx, pdf_document *doc, const char *filename, const char *mimetype, fz_buffer *contents, int64_t created, int64_t modifed, int add_checksum);
+
+/*
+	Obtain parameters for embedded file: name, size,
+	creation and modification dates cnad MIME type.
+*/
+void pdf_get_embedded_file_params(fz_context *ctx, pdf_obj *fs, pdf_embedded_file_params *out);
+
+/*
+	Load embedded file contents in a buffer which
+	needs to be dropped by the called after use.
+*/
+fz_buffer *pdf_load_embedded_file_contents(fz_context *ctx, pdf_obj *fs);
+
+/*
+	Verifies the embedded file checksum. Returns 1
+	if the verifiction is successful or there is no
+	checksum to be verified, or 0 if verification fails.
+*/
+int pdf_verify_embedded_file_checksum(fz_context *ctx, pdf_obj *fs);
+
 pdf_obj *pdf_lookup_dest(fz_context *ctx, pdf_document *doc, pdf_obj *needle);
-fz_link *pdf_load_link_annots(fz_context *ctx, pdf_document *, pdf_obj *annots, int pagenum, fz_matrix page_ctm);
+fz_link *pdf_load_link_annots(fz_context *ctx, pdf_document *, pdf_page *, pdf_obj *annots, int pagenum, fz_matrix page_ctm);
 
 void pdf_annot_MK_BG(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
 void pdf_annot_MK_BC(fz_context *ctx, pdf_annot *annot, int *n, float color[4]);
@@ -676,5 +909,33 @@ void pdf_set_annot_hot(fz_context *ctx, pdf_annot *annot, int hot);
 
 void pdf_set_annot_appearance(fz_context *ctx, pdf_annot *annot, const char *appearance, const char *state, fz_matrix ctm, fz_rect bbox, pdf_obj *res, fz_buffer *contents);
 void pdf_set_annot_appearance_from_display_list(fz_context *ctx, pdf_annot *annot, const char *appearance, const char *state, fz_matrix ctm, fz_display_list *list);
+
+/*
+	Check to see if an annotation has a file specification.
+*/
+int pdf_annot_has_filespec(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Retrieve the file specification for the given annotation.
+*/
+pdf_obj *pdf_annot_filespec(fz_context *ctx, pdf_annot *annot);
+
+/*
+	Set the annotation file specification.
+*/
+void pdf_set_annot_filespec(fz_context *ctx, pdf_annot *annot, pdf_obj *obj);
+
+/*
+	Get/set a hidden flag preventing the annotation from being
+	rendered when it is being edited. This flag is independent
+	of the hidden flag in the PDF annotation object described in the PDF specification.
+*/
+int pdf_annot_hidden_for_editing(fz_context *ctx, pdf_annot *annot);
+void pdf_set_annot_hidden_for_editing(fz_context *ctx, pdf_annot *annot, int hidden);
+
+/*
+ * Apply Redaction annotation by redacting page underneath and removing the annotation.
+ */
+int pdf_apply_redaction(fz_context *ctx, pdf_annot *annot, pdf_redact_options *opts);
 
 #endif
