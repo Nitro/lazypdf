@@ -233,7 +233,7 @@ save_to_png_output save_to_png(save_to_png_input input) {
 		page = pdf_load_page(ctx, doc, input.page);
 
 		float scale_factor = 1.5;
-		fz_rect bounds = pdf_bound_page(ctx, page);
+		fz_rect bounds = pdf_bound_page(ctx, page, FZ_CROP_BOX);
 		if (input.width != 0) {
 			scale_factor = input.width / bounds.x1;
 		} else if (input.scale != 0) {
