@@ -4,7 +4,7 @@ go 1.22.4
 
 require (
 	github.com/stretchr/testify v1.9.0
-	gopkg.in/DataDog/dd-trace-go.v1 v1.64.0
+	gopkg.in/DataDog/dd-trace-go.v1 v1.64.1
 )
 
 require (
