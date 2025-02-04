@@ -2,8 +2,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - '**'
-      - '!main'
+      - "**"
+      - "!main"
     paths:
       - misc/jemalloc/version
       - .github/workflows/jemalloc.yml
@@ -33,6 +33,10 @@ jobs:
         include:
           - alias: linux
             os: ubuntu-latest
+            architecture: x86-64
+          - alias: macos
+            os: macos-latest
+            architecture: arm64
     runs-on: ${{ matrix.os }}
     needs: version
 
@@ -47,6 +51,10 @@ jobs:
           ref: ${{needs.version.outputs.version}}
           path: tmp
 
+      - name: Install macOS dependencies
+        if: matrix.alias == 'macos'
+        run: brew install autoconf gcc
+
       - name: Build Jemalloc
         working-directory: tmp
         run: |
@@ -56,8 +64,8 @@ jobs:
 
       - name: Update lib
         run: |
-          mkdir -p misc/jemalloc/lib/x86-64-${{ matrix.alias }}
-          cp tmp/lib/libjemalloc.a misc/jemalloc/lib/x86-64-${{ matrix.alias }}/
+          mkdir -p misc/jemalloc/lib/${{ matrix.architecture }}-${{ matrix.alias }}
+          cp tmp/lib/libjemalloc.a misc/jemalloc/lib/${{ matrix.architecture }}-${{ matrix.alias }}/
 
       - name: Remove Jemalloc temporary folder
         run: rm -Rf tmp
@@ -65,6 +73,7 @@ jobs:
       - name: Commit updated library
         run: |
           if [ -n "$(git status --porcelain)" ]; then
+            git pull
             git config user.email "no-reply@github.com"
             git config user.name "GitHub Actions"
             git add .

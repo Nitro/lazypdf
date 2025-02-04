@@ -2,8 +2,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - '**'
-      - '!main'
+      - "**"
+      - "!main"
     paths:
       - misc/mupdf/version
       - .github/workflows/mupdf.yml
@@ -33,6 +33,10 @@ jobs:
         include:
           - alias: linux
             os: ubuntu-latest
+            architecture: x86-64
+          - alias: macos
+            os: macos-latest
+            architecture: arm64
     runs-on: ${{ matrix.os }}
     needs: version
 
@@ -48,15 +52,20 @@ jobs:
           submodules: true
           path: tmp
 
+      - name: Install macOS dependencies
+        if: matrix.alias == 'macos'
+        run: brew install autoconf gcc
+
       - name: Build MuPDF
         working-directory: tmp
-        run: make -j libs
+        # The -j1 is important to avoid 'fork: Resource temporarily unavailable' errors.
+        run: make -j1 libs
 
       - name: Update lib
         run: |
-          mkdir -p misc/mupdf/lib/x86-64-${{ matrix.alias }}
-          cp tmp/build/release/libmupdf.a misc/mupdf/lib/x86-64-${{ matrix.alias }}/
-          cp tmp/build/release/libmupdf-third.a misc/mupdf/lib/x86-64-${{ matrix.alias }}/
+          mkdir -p misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}
+          cp tmp/build/release/libmupdf.a misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}/
+          cp tmp/build/release/libmupdf-third.a misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}/
 
       - name: Remove MuPDF temporary folder
         run: rm -Rf tmp
@@ -64,6 +73,7 @@ jobs:
       - name: Commit updated library
         run: |
           if [ -n "$(git status --porcelain)" ]; then
+            git pull
             git config user.email "no-reply@github.com"
             git config user.name "GitHub Actions"
             git add .
