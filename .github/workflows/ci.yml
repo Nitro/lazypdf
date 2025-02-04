@@ -11,7 +11,9 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os:
+          - ubuntu-latest
+          - macos-latest
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -35,6 +37,12 @@ jobs:
           key: ${{ matrix.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ matrix.os }}-go-
+
+      - name: Install macOS dependencies
+        if: matrix.alias == 'macos'
+        run: |
+          xcode-select --install || true
+          brew install autoconf gcc
 
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
