@@ -14,11 +14,9 @@ go build
 go test -race
 ```
 
-## Working with unsupported environments
-It is possible to run this project locally on unsupported environments, operating system and CPU architecture, with the following command:
-```shell
-docker run --rm -it --platform linux/amd64 -v ${PWD}:/code -w /code golang:1.23.6
-```
+## Supported environments
+- Linux amd64
+- MacOS arm64
 
 ## Updating the native libraries
 To update MuPDF or jemalloc simply change its version at `misc/{library}/version` and submit the change at a pull request. GitHub Actions will then trigger the process of updating the library and headers through a series of commits at the pull request branch.
