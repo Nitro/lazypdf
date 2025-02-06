@@ -19,7 +19,7 @@ import (
 	ddTracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
-const defaultDPI = 96
+const defaultDPI = 72
 
 func init() {
 	C.init()
