@@ -1,11 +1,9 @@
-#ifndef MAIN_H
-#define MAIN_H
+#ifndef PDF_HANDLER_H
+#define PDF_HANDLER_H
 
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-
-void init();
 
 
 typedef struct {
