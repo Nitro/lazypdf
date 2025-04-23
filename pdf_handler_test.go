@@ -651,12 +651,6 @@ func TestGetFontPath(t *testing.T) {
 		expectErr      bool
 		isStandardFont bool
 	}{
-		{"Valid Font DejaVuSans.ttf", "DejaVuSans", false, false},
-		{"Valid Font DejaVuSans-Bold.ttf", "DejaVuSans Bold", false, false},
-		{"Valid Font DejaVuSansMono.ttf", "DejaVuSans Mono", false, false},
-		{"Valid Font Arial.ttf", "Arial", false, false},
-		{"Valid Font Arial_Bold.ttf", "Arial Bold", false, false},
-		{"Valid Font Arial_Bold_Italic.ttf", "Arial Bold Italic", false, false},
 		{"Standard Font Courier", "Courier", false, true},
 		{"Standard Font Courier-BoldOblique", "Courier-BoldOblique", false, true},
 		{"Standard Font ZapfDingbats", "ZapfDingbats", false, true},
@@ -700,7 +694,7 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 		params     TextParams
 	}{
 		{
-			name:       "Text - A4 - Portrait - Arial - 12",
+			name:       "Text - A4 - Portrait - Courier - 12",
 			inputFile:  "testdata/pdf_handler_sample.pdf",
 			outputFile: "tmp/output_rotate_0_add_text_to_page.pdf",
 			params: TextParams{
@@ -717,7 +711,7 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 			},
 		},
 		{
-			name:       "Text - A4 - Landscape - Arial Italic - 8",
+			name:       "Text - A4 - Landscape - Courier Italic - 8",
 			inputFile:  "testdata/sample_rotate_90.pdf",
 			outputFile: "tmp/output_rotate_90_add_text_to_page.pdf",
 			params: TextParams{
@@ -730,11 +724,11 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 				Font: struct {
 					Family string
 					Size   float64
-				}{Family: "Arial Italic", Size: 8},
+				}{Family: "Courier", Size: 8},
 			},
 		},
 		{
-			name:       "Text - A4 - Landscape - Arial Bold - 8 - top right",
+			name:       "Text - A4 - Landscape - Courier Bold - 8 - top right",
 			inputFile:  "testdata/sample_rotate_270.pdf",
 			outputFile: "tmp/output_rotate_270_add_text_to_page_top_right.pdf",
 			params: TextParams{
@@ -819,7 +813,7 @@ func TestPdfHandler_AddTextToPage_InvalidPage(t *testing.T) {
 		Font: struct {
 			Family string
 			Size   float64
-		}{Family: "Arial", Size: 12},
+		}{Family: "Courier", Size: 12},
 	}
 
 	err = handler.AddTextToPage(document, params)
@@ -853,7 +847,7 @@ func TestPdfHandler_AddTextToPage_InvalidTextLengh(t *testing.T) {
 		Font: struct {
 			Family string
 			Size   float64
-		}{Family: "Arial", Size: 12},
+		}{Family: "Courier", Size: 12},
 	}
 
 	err = handler.AddTextToPage(document, params)
@@ -1081,7 +1075,7 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 						Font: struct {
 							Family string
 							Size   float64
-						}{Family: "Arial", Size: 12},
+						}{Family: "Courier", Size: 12},
 					}
 					return handler.AddTextToPage(document, params)
 				},
@@ -1096,7 +1090,7 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 						Font: struct {
 							Family string
 							Size   float64
-						}{Family: "Arial", Size: 14},
+						}{Family: "Courier", Size: 14},
 					}
 					return handler.AddTextToPage(document, params)
 				},

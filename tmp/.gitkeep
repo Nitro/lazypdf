@@ -1,0 +1,2 @@
+# pdf_handler tests need tmp pre-created
+# git won't commit empty folder without this
