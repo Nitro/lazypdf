@@ -11,25 +11,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-/*
-	func TestSaveToHTMLOK(t *testing.T) {
-		for i := uint16(0); i < 13; i++ {
-			file, err := os.Open("testdata/sample.pdf")
-			require.NoError(t, err)
-			defer func() { require.NoError(t, file.Close()) }()
+func TestSaveToHTMLOK(t *testing.T) {
+	for i := uint16(0); i < 13; i++ {
+		file, err := os.Open("testdata/sample.pdf")
+		require.NoError(t, err)
+		defer func() { require.NoError(t, file.Close()) }()
 
-			buf := bytes.NewBuffer([]byte{})
-			err = SaveToHTML(context.Background(), i, 0, 0, 0, file, buf)
-			require.NoError(t, err)
+		buf := bytes.NewBuffer([]byte{})
+		err = SaveToHTML(context.Background(), i, 0, 0, 0, file, buf)
+		require.NoError(t, err)
 
-			expectedPage, err := os.ReadFile(fmt.Sprintf("testdata/sample_page%d.html", i))
-			require.NoError(t, err)
-			resultPage, err := io.ReadAll(buf)
-			require.NoError(t, err)
-			require.Equal(t, expectedPage, resultPage)
-		}
+		expectedPage, err := os.ReadFile(fmt.Sprintf("testdata/sample_page%d.html", i))
+		require.NoError(t, err)
+		resultPage, err := io.ReadAll(buf)
+		require.NoError(t, err)
+		require.Equal(t, expectedPage, resultPage)
 	}
-*/
+}
+
 func TestSaveToHTMLFail(t *testing.T) {
 	file, err := os.Open("testdata/sample-invalid.pdf")
 	require.NoError(t, err)
