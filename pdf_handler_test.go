@@ -26,8 +26,7 @@ func TestPdfHandler_OpenPDF(t *testing.T) {
 	if document.handle == 0 {
 		t.Fatalf("handle is null:")
 	}
-	defer handler.ClosePDF(document)
-
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 }
 
 func TestPdfHandler_OpenInvalidFile(t *testing.T) {
@@ -43,7 +42,6 @@ func TestPdfHandler_OpenInvalidFile(t *testing.T) {
 	_, err = handler.OpenPDF(file)
 	require.Error(t, err)
 	require.Equal(t, "failure at the C/MuPDF open_pdf function: no objects found", err.Error())
-
 }
 
 func TestPdfHandler_OpenNil(t *testing.T) {
@@ -55,7 +53,6 @@ func TestPdfHandler_OpenNil(t *testing.T) {
 	_, err := handler.OpenPDF(nil)
 	require.Error(t, err)
 	require.Equal(t, "payload can't be nil", err.Error())
-
 }
 
 func TestPdfHandler_TestClosePDF(t *testing.T) {
@@ -91,8 +88,9 @@ func TestPdfHandler_LocationSizeToPdfPoints_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
+	//nolint:dogsled // we only care about the error
 	_, _, _, _, err = handler.LocationSizeToPdfPoints(
 		document,
 		2,
@@ -101,6 +99,7 @@ func TestPdfHandler_LocationSizeToPdfPoints_InvalidPage(t *testing.T) {
 		0,
 		0,
 	)
+
 	require.Error(t, err)
 	require.Equal(t, "failed to get page size: failure at the C/MuPDF get_page_size function: invalid page number: 3", err.Error())
 }
@@ -157,9 +156,9 @@ func TestPdfHandler_LocationSizeToPdfPoints_InvalidInputPercentages(t *testing.T
 			t.Parallel()
 
 			handler := setupPdfHandler(t)
-			_, handle := openTestPDF(t, tt.path)
+			document := openTestPDF(t, tt.path)
 
-			_, _, _, _, err := handler.LocationSizeToPdfPoints(handle, 0, tt.x, tt.y, tt.width, tt.height)
+			_, _, _, _, err := handler.LocationSizeToPdfPoints(document, 0, tt.x, tt.y, tt.width, tt.height)
 			require.Error(t, err)
 			require.EqualError(t, err, tt.expectedError)
 		})
@@ -224,10 +223,10 @@ func TestPdfHandler_TestLocationSizeToPdfPoints(t *testing.T) {
 			t.Parallel()
 
 			handler := setupPdfHandler(t)
-			_, handle := openTestPDF(t, tt.path)
+			document := openTestPDF(t, tt.path)
 
 			X, Y, Width, Height, err := handler.LocationSizeToPdfPoints(
-				handle,
+				document,
 				0,
 				tt.X,
 				tt.Y,
@@ -258,8 +257,7 @@ func TestPdfHandler_LocationToPdfPoints_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
-
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 	_, _, err = handler.LocationToPdfPoints(
 		document,
 		2,
@@ -314,9 +312,9 @@ func TestPdfHandler_LocationToPdfPoints_InvalidInputPercentages(t *testing.T) {
 			t.Parallel()
 
 			handler := setupPdfHandler(t)
-			_, handle := openTestPDF(t, tt.path)
+			document := openTestPDF(t, tt.path)
 
-			_, _, err := handler.LocationToPdfPoints(handle, 0, tt.x, tt.y)
+			_, _, err := handler.LocationToPdfPoints(document, 0, tt.x, tt.y)
 			require.Error(t, err)
 			require.EqualError(t, err, tt.expectedError)
 		})
@@ -377,10 +375,10 @@ func TestPdfHandler_TestLocationToPdfPoint(t *testing.T) {
 			t.Parallel()
 
 			handler := setupPdfHandler(t)
-			_, handle := openTestPDF(t, tt.path)
+			document := openTestPDF(t, tt.path)
 
 			X, Y, err := handler.LocationToPdfPoints(
-				handle,
+				document,
 				0,
 				tt.X,
 				tt.Y,
@@ -407,7 +405,7 @@ func TestPdfHandler_GetPageSize_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	_, err = handler.GetPageSize(document, 2)
 	require.Error(t, err)
@@ -433,16 +431,15 @@ func TestPdfHandler_TestGetPageSize(t *testing.T) {
 			t.Parallel()
 
 			handler := setupPdfHandler(t)
-			_, handle := openTestPDF(t, tt.path)
+			document := openTestPDF(t, tt.path)
 
-			size, err := handler.GetPageSize(handle, 0)
+			size, err := handler.GetPageSize(document, 0)
 			require.NoError(t, err, "Failed to get page size for file: %s", tt.path)
 
 			require.InDelta(t, tt.expectedWidth, size.Width, 0.1, "Unexpected width for file: %s", tt.path)
 			require.InDelta(t, tt.expectedHeight, size.Height, 0.1, "Unexpected height for file: %s", tt.path)
 		})
 	}
-
 }
 
 func setupPdfHandler(t *testing.T) PdfHandler {
@@ -452,7 +449,7 @@ func setupPdfHandler(t *testing.T) PdfHandler {
 	return PdfHandler{Logger: logger}
 }
 
-func openTestPDF(t *testing.T, filePath string) (*os.File, PdfDocument) {
+func openTestPDF(t *testing.T, filePath string) PdfDocument {
 	t.Helper()
 
 	handler := setupPdfHandler(t)
@@ -467,7 +464,7 @@ func openTestPDF(t *testing.T, filePath string) (*os.File, PdfDocument) {
 		require.NoError(t, handler.ClosePDF(document))
 	})
 
-	return file, document
+	return document
 }
 
 func addImageAndSave(t *testing.T, handler PdfHandler, document PdfDocument, params ImageParams, outputPath string) {
@@ -564,7 +561,7 @@ func TestPdfHandler_AddImageToPage(t *testing.T) {
 			t.Parallel()
 
 			handler := setupPdfHandler(t)
-			_, document := openTestPDF(t, tt.pdfPath)
+			document := openTestPDF(t, tt.pdfPath)
 
 			addImageAndSave(t, handler, document, tt.imageParams, tt.outputPath)
 		})
@@ -585,7 +582,7 @@ func TestPdfHandler_AddImageToPage_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := ImageParams{
 		Page: 13,
@@ -619,7 +616,7 @@ func TestPdfHandler_AddImageToPage_InvalidImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := ImageParams{
 		Page: 0,
@@ -637,7 +634,6 @@ func TestPdfHandler_AddImageToPage_InvalidImage(t *testing.T) {
 	err = handler.AddImageToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at the C/MuPDF add_image_to_page function: unknown image file format", err.Error())
-
 }
 
 func TestGetFontPath(t *testing.T) {
@@ -776,7 +772,7 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer handler.ClosePDF(document)
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			err = handler.AddTextToPage(document, tt.params)
 			require.NoError(t, err, "failed to add text")
@@ -801,7 +797,7 @@ func TestPdfHandler_AddTextToPage_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := TextParams{
 		Value: "Hello, World!",
@@ -835,7 +831,7 @@ func TestPdfHandler_AddTextToPage_InvalidTextLengh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := TextParams{
 		Value: strings.Repeat("a", 301),
@@ -869,7 +865,7 @@ func TestPdfHandler_AddTextToPage_InvalidFont(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := TextParams{
 		Value: "Hello, World!",
@@ -981,7 +977,7 @@ func TestPdfHandler_AddCheckboxToPage(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer handler.ClosePDF(document)
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			err = handler.AddCheckboxToPage(document, tt.params)
 			require.NoError(t, err, "failed to add checkbox")
@@ -1006,7 +1002,7 @@ func TestPdfHandler_AddCheckboxToPage_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := CheckboxParams{
 		Value: true,
@@ -1040,7 +1036,7 @@ func TestPdfHandler_SavePDF_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer handler.ClosePDF(document)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	outputPath := "tmp/output.pdf"
 
@@ -1156,7 +1152,7 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer handler.ClosePDF(document)
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			for _, operation := range tt.operations {
 				err := operation(handler, document)

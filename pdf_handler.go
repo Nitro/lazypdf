@@ -134,7 +134,6 @@ func (p PdfHandler) LocationToPdfPoints(document PdfDocument, page int, x, y flo
 }
 
 func (p PdfHandler) OpenPDF(rawPayload io.Reader) (PdfDocument, error) {
-
 	filename, err := savePayloadToTempFile(rawPayload)
 	if err != nil {
 		return PdfDocument{}, err
@@ -161,7 +160,6 @@ func (p PdfHandler) OpenPDF(rawPayload io.Reader) (PdfDocument, error) {
 }
 
 func (p PdfHandler) ClosePDF(document PdfDocument) error {
-
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
@@ -176,13 +174,12 @@ func (p PdfHandler) ClosePDF(document PdfDocument) error {
 	return nil
 }
 
-func (p PdfHandler) GetPageSize(document PdfDocument, Page int) (PageSize, error) {
-
+func (p PdfHandler) GetPageSize(document PdfDocument, page int) (PageSize, error) {
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
 	}
-	output := C.get_page_size(pdf, C.int(Page))
+	output := C.get_page_size(pdf, C.int(page))
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
 		return PageSize{}, fmt.Errorf("failure at the C/MuPDF get_page_size function: %s", C.GoString(output.error))
@@ -234,7 +231,6 @@ func (p PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) err
 }
 
 func (p PdfHandler) generateFontCandidates(font string) []string {
-
 	exts := []string{".ttf", ".otf"}
 
 	unique := make(map[string]struct{})
@@ -249,7 +245,7 @@ func (p PdfHandler) generateFontCandidates(font string) []string {
 			unique[transform(font)+ext] = struct{}{}
 		}
 	}
-	var candidates []string
+	candidates := make([]string, 0, len(unique))
 	for key := range unique {
 		candidates = append(candidates, key)
 	}
@@ -279,7 +275,6 @@ func IsStandardFont(name string) bool {
 }
 
 func (p PdfHandler) GetFontPath(font string) (string, error) {
-
 	if IsStandardFont(font) {
 		return "", nil // Standard fonts do not need a file path
 	}
@@ -322,7 +317,6 @@ func (p PdfHandler) GetFontPath(font string) (string, error) {
 }
 
 func (p PdfHandler) AddTextToPage(document PdfDocument, params TextParams) error {
-
 	fontPath, err := p.GetFontPath(params.Font.Family)
 	if err != nil {
 		return fmt.Errorf("failure at PdfHandler AddTextToPage function: failed to find font path for %q", params.Font.Family)
@@ -379,7 +373,6 @@ func boolToInt(value bool) int {
 }
 
 func (p PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParams) error {
-
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
