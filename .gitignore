@@ -4,3 +4,4 @@
 # Editor
 /.vscode
 /.devcontainer
+/tmp/*
