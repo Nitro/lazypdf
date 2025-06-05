@@ -33,6 +33,6 @@ jobs:
 
       - name: Exec ${{ matrix.target }}
         env:
-          SNYK_TOKEN: ${{ secrets.WAPADI_SNYK_ORG_ID_GH }}
+          SNYK_TOKEN: ${{ secrets.sn_x_pub }}
           SNYK_API: https://app.eu.snyk.io/api
         run: ${{ matrix.cmd }}
