@@ -35,4 +35,4 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.WAPADI_SNYK_ORG_ID_GH }}
           SNYK_API: https://app.eu.snyk.io/api
-        run: ${{ matrix.cmd }} --org=wapadi
+        run: ${{ matrix.cmd }}
