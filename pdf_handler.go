@@ -113,7 +113,7 @@ func (p PdfHandler) LocationSizeToPdfPoints(document PdfDocument, page int, x, y
 		return 0, 0, 0, 0, fmt.Errorf("invalid input percentages: x=%f, y=%f, width=%f, height=%f", x, y, width, height)
 	}
 	return x * pageSize.Width,
-		(1.0 - y) * pageSize.Height,
+		(1.0 - y - height) * pageSize.Height,
 		width * pageSize.Width,
 		height * pageSize.Height,
 		nil
