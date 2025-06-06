@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <stdbool.h>
 
 #include <mupdf/fitz.h>
 #include <mupdf/pdf.h>
@@ -49,23 +50,70 @@ closePDFOutput close_pdf(pdfDocument input) {
     return output;
 }
 
-int page_add_content_to_content_stream(fz_context *ctx, pdf_page *page, fz_buffer *content) {
+int page_insert_content_to_content_stream(fz_context *ctx, pdf_page *page, fz_buffer *content, bool append) {
     pdf_obj *existing_content = pdf_dict_get(ctx, page->obj, PDF_NAME(Contents));
     pdf_obj *new_stream = pdf_add_stream(ctx, page->doc, content, NULL, 0);
     int stream_num = pdf_to_num(ctx, new_stream);
 
     if (pdf_is_array(ctx, existing_content)) {
-        pdf_array_push(ctx, existing_content, new_stream);
-    } 
+        if (append)
+            pdf_array_push(ctx, existing_content, new_stream);
+        else
+            pdf_array_insert(ctx, existing_content, new_stream, 0);        
+    }
     else {
         pdf_obj *array = pdf_new_array(ctx, page->doc, 5);
         if (existing_content && pdf_to_num(ctx, existing_content)) {
             pdf_array_push(ctx, array, existing_content);
         }
-        pdf_array_push(ctx, array, new_stream);
+        if (append) {
+            pdf_array_push(ctx, array, new_stream);
+        } else {
+            pdf_array_insert(ctx, array, new_stream, 0);
+        }
         pdf_dict_put(ctx, page->obj, PDF_NAME(Contents), array);
     }
     return stream_num;
+}
+
+int page_add_content_to_content_stream(fz_context *ctx, pdf_page *page, fz_buffer *content) {
+    return page_insert_content_to_content_stream(ctx, page, content, true);
+}
+
+
+void wrap_page_contents(fz_context *ctx, pdf_page *page) {
+    // Ensure page is in a balanced graphics state
+    pdf_obj *resources = NULL;
+    pdf_obj *contents = NULL;
+    fz_buffer *buf = NULL;
+
+    int prepend = 0;
+    int append = 0;
+    
+    resources = pdf_dict_get(ctx, page->obj, PDF_NAME(Resources));
+    contents = pdf_dict_get(ctx, page->obj, PDF_NAME(Contents));
+
+    pdf_count_q_balance(ctx, page->doc, resources, contents, &prepend, &append);
+
+    if (prepend)
+    {
+        // Prepend enough 'q' to ensure we can get back to initial state.
+        buf = fz_new_buffer(ctx, 1024);
+        while (prepend-- > 0)
+            fz_append_string(ctx, buf, "q\n");
+        page_insert_content_to_content_stream(ctx, page, buf, false);
+        fz_drop_buffer(ctx, buf);
+    }
+
+    if (append)
+    {
+        // Append enough 'Q' to ensure we can get back to initial state.
+        buf = fz_new_buffer(ctx, 1024);
+        while (append-- > 0)
+            fz_append_string(ctx, buf, "Q\n");
+        page_add_content_to_content_stream(ctx, page, buf);
+        fz_drop_buffer(ctx, buf);
+    }
 }
 
 pdf_obj *get_or_create_dict(fz_context *ctx, pdf_obj *parent, pdf_obj *key) {
@@ -96,13 +144,13 @@ int  page_get_rotation(fz_context *ctx, pdf_page *page) {
 }
 
 fz_matrix rect_to_page_space(fz_context *ctx, pdf_page *page, fz_rect position) {
-    fz_matrix transform         = fz_identity; 
+    fz_matrix transform         = fz_identity;
     fz_matrix page_matrix       = fz_identity;
     fz_rect page_crop_box       = fz_empty_rect;
     fz_point page_crop_offset   = { .x = 0, .y = 0 };
     int rotation                = 0;
     float page_width            = 0;
-    float page_height           = 0;    
+    float page_height           = 0;
 
     pdf_page_transform(ctx, page, &page_crop_box, &page_matrix);
     page_crop_offset = fz_make_point(page_crop_box.x0, page_crop_box.y0);
@@ -158,21 +206,20 @@ fz_matrix point_to_page_space(fz_context *ctx, pdf_page *page, fz_point position
     page_width  = page_crop_box.x1 - page_crop_box.x0;
     page_height = page_crop_box.y1 - page_crop_box.y0;
 
-
     rotation = page_get_rotation(ctx, page);
     transform = fz_concat(transform, fz_rotate(rotation));
 
     switch (rotation) {
-        case 0: 
+        case 0:
             transform = fz_concat(transform, fz_translate(position.x, position.y));
             break;
-        case 90: 
+        case 90:
             transform = fz_concat(transform, fz_translate(page_height - position.y, position.x));
             break;
-        case 180: 
+        case 180:
             transform = fz_concat(transform, fz_translate(page_width - position.x, page_height - position.y));
             break;
-        case 270: 
+        case 270:
             transform = fz_concat(transform, fz_translate(position.y, page_width - position.x));
             break;
     }
@@ -193,7 +240,7 @@ PageSizeOutput get_page_size(pdfDocument document, int page_number) {
     fz_try(ctx) {
         pdf  = (pdf_document *)document.handle;
         page = pdf_load_page(ctx, pdf, page_number);
-        fz_rect page_crop_box = pdf_bound_page(ctx, page, FZ_CROP_BOX); 
+        fz_rect page_crop_box = pdf_bound_page(ctx, page, FZ_CROP_BOX);
         output.width = page_crop_box.x1 - page_crop_box.x0;
         output.height = page_crop_box.y1 - page_crop_box.y0;
 
@@ -233,7 +280,7 @@ void page_add_image(fz_context *ctx, pdf_page *page, fz_image *image, fz_rect po
         fz_snprintf(resource_name, sizeof(resource_name), "Img%d", pdf_to_num(ctx, image_object));
         pdf_dict_puts(ctx, xobject, resource_name, image_object);
         // Add image to content stream
-        stream = fz_new_buffer(ctx, 1024);        
+        stream = fz_new_buffer(ctx, 1024);
         matrix = rect_to_page_space(ctx, page, position);
         fz_append_string(ctx, stream, "q\n");               // Saves the current graphics state.
         fz_append_printf(ctx, stream, "%g %g %g %g %g %g cm\n",
@@ -265,11 +312,11 @@ addImageOutput add_image_to_page(pdfDocument document, addImageInput input) {
     pdf_document *pdf       = NULL;
     pdf_page *page          = NULL;
     fz_image *image         = NULL;
-    fz_rect position        = { 
+    fz_rect position        = {
         input.x,
         input.y,
         input.x + input.width,
-        input.y + input.height 
+        input.y + input.height
     };
 
     fz_context *ctx = fz_clone_context(global_ctx);
@@ -287,6 +334,8 @@ addImageOutput add_image_to_page(pdfDocument document, addImageInput input) {
         if (!image) {
             fz_throw(ctx, FZ_ERROR_GENERIC, "Failed to load image from %s", input.path);
         }
+
+        wrap_page_contents(ctx, page);
         page_add_image(ctx, page, image, position);
     }
     fz_always(ctx) {
@@ -408,6 +457,8 @@ addTextOutput add_text_to_page(pdfDocument document, addTextInput input) {
             fz_throw(ctx, FZ_ERROR_GENERIC, "Failed to load font %s %s", input.font_family, input.font_path);
         }
         fz_point position = {input.x, input.y};
+
+        wrap_page_contents(ctx, page);
         page_add_text(ctx, page, input.text, position,font, input.font_size, "Latin");
     }
     fz_always(ctx) {
@@ -424,9 +475,7 @@ addTextOutput add_text_to_page(pdfDocument document, addTextInput input) {
     return output;
 }
 
-
 void page_add_checkbox(fz_context *ctx, pdf_page *page, fz_rect position, int is_checked) {
-
     fz_buffer *stream           = NULL;
     fz_matrix matrix            = fz_identity;
     fz_font *font               = NULL;
@@ -460,8 +509,8 @@ void page_add_checkbox(fz_context *ctx, pdf_page *page, fz_rect position, int is
         fz_append_string(ctx, stream, "0.0 G\n");           // Sets the gray stroke color to black
         fz_append_printf(ctx, stream, "0.1 w\n",
             line_width
-        );                                                  // Set the line width 
-        fz_append_printf(ctx, stream, "%g %g %g %g re\n",   
+        );                                                  // Set the line width
+        fz_append_printf(ctx, stream, "%g %g %g %g re\n",
             border_rect.x0 + line_width / 2,
             border_rect.y0 + line_width / 2,
             border_rect.x1 - line_width / 2,
@@ -476,7 +525,7 @@ void page_add_checkbox(fz_context *ctx, pdf_page *page, fz_rect position, int is
             font_dict = get_or_create_dict(ctx, resources, PDF_NAME(Font));
             font_ref  = pdf_add_simple_font(ctx, page->doc, font, encoding);
             pdf_dict_puts(ctx, font_dict, zapdb_resource_name, font_ref);
-            
+
             // Add V mark to content stream
             fz_append_string(ctx, stream, "q\n");           // Saves the current graphics state.
             fz_append_string(ctx, stream, "BT\n");          // Begins a text object
@@ -501,7 +550,7 @@ void page_add_checkbox(fz_context *ctx, pdf_page *page, fz_rect position, int is
     }
     fz_always(ctx) {
         fz_drop_buffer(ctx, stream);
-        fz_drop_font(ctx, font);    
+        fz_drop_font(ctx, font);
     }
     fz_catch(ctx) {
         fz_rethrow(ctx);
@@ -528,9 +577,8 @@ addCheckboxOutput add_checkbox_to_page(pdfDocument document, addCheckboxInput in
     fz_try(ctx) {
         pdf = (pdf_document *)document.handle;
         page = pdf_load_page(ctx, pdf, input.page);
-        if (!page) {
-            fz_throw(ctx, FZ_ERROR_GENERIC, "Failed to load page %d", input.page);
-        }
+
+        wrap_page_contents(ctx, page);
         page_add_checkbox(ctx, page, position, input.value);
 
     }
@@ -555,7 +603,7 @@ savePDFOutput save_pdf(pdfDocument document, const char *file_path) {
         output.error = strdup("Failed to clone global context");
         return output;
     }
-    
+
     fz_try(ctx) {
         pdf_document *doc = (pdf_document *)document.handle;
 
@@ -564,7 +612,7 @@ savePDFOutput save_pdf(pdfDocument document, const char *file_path) {
         options.do_compress_images = 1;
         options.do_compress_fonts = 1;
         options.do_garbage = 3;
-       
+
         pdf_save_document(ctx, doc, file_path, &options);
     }
     fz_catch(ctx) {

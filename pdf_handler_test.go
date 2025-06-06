@@ -190,13 +190,13 @@ func TestPdfHandler_TestLocationSizeToPdfPoints(t *testing.T) {
 			"bottom right",
 			"testdata/pdf_handler_sample.pdf",
 			1, 1, 1, 1,
-			612.0, 0, 612.0, 792.0,
+			612.0, -792, 612.0, 792.0,
 		},
 		{
 			"Center of the page",
 			"testdata/pdf_handler_sample.pdf",
 			0.5, 0.5, 0.5, 0.5,
-			612.0 / 2, 792.0 / 2, 612.0 / 2, 792.0 / 2,
+			612.0 / 2, 0, 612.0 / 2, 792.0 / 2,
 		},
 		{
 			"upper left rotated",
@@ -208,13 +208,13 @@ func TestPdfHandler_TestLocationSizeToPdfPoints(t *testing.T) {
 			"bottom right rotated",
 			"testdata/sample_rotate_90.pdf",
 			1, 1, 1, 1,
-			792.0, 0, 792.0, 612.0,
+			792.0, -612, 792.0, 612.0,
 		},
 		{
 			"Center of the rotated page",
 			"testdata/sample_rotate_90.pdf",
 			0.5, 0.5, 0.5, 0.5,
-			792.0 / 2, 612.0 / 2, 792.0 / 2, 612.0 / 2,
+			792.0 / 2, 0, 792.0 / 2, 612.0 / 2,
 		},
 	}
 
@@ -223,10 +223,10 @@ func TestPdfHandler_TestLocationSizeToPdfPoints(t *testing.T) {
 			t.Parallel()
 
 			handler := setupPdfHandler(t)
-			document := openTestPDF(t, tt.path)
+			handle := openTestPDF(t, tt.path)
 
 			X, Y, Width, Height, err := handler.LocationSizeToPdfPoints(
-				document,
+				handle,
 				0,
 				tt.X,
 				tt.Y,
