@@ -243,154 +243,6 @@ func TestPdfHandler_TestLocationSizeToPdfPoints(t *testing.T) {
 	}
 }
 
-func TestPdfHandler_LocationToPdfPoints_InvalidPage(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	handler := PdfHandler{Logger: logger}
-
-	file, err := os.Open("testdata/pdf_handler_sample.pdf")
-	require.NoError(t, err)
-	defer func() { require.NoError(t, file.Close()) }()
-
-	document, err := handler.OpenPDF(file)
-	if err != nil {
-		t.Fatalf("OpenPDF: %v", err)
-	}
-	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
-	_, _, err = handler.LocationToPdfPoints(
-		document,
-		2,
-		0,
-		0,
-	)
-	require.Error(t, err)
-	require.Equal(t, "failed to get page size: failure at the C/MuPDF get_page_size function: invalid page number: 3", err.Error())
-}
-
-func TestPdfHandler_LocationToPdfPoints_InvalidInputPercentages(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name                string
-		path                string
-		x, y, width, height float64
-		expectedError       string
-	}{
-		{
-			name:          "X greater than 1",
-			path:          "testdata/pdf_handler_sample.pdf",
-			x:             1.1,
-			y:             0.5,
-			expectedError: "invalid input percentages: x=1.100000, y=0.500000",
-		},
-		{
-			name:          "Y less than 0",
-			path:          "testdata/pdf_handler_sample.pdf",
-			x:             0.5,
-			y:             -0.1,
-			expectedError: "invalid input percentages: x=0.500000, y=-0.100000",
-		},
-		{
-			name:          "X less than 0",
-			path:          "testdata/pdf_handler_sample.pdf",
-			x:             -0.5,
-			y:             0.5,
-			expectedError: "invalid input percentages: x=-0.500000, y=0.500000",
-		},
-		{
-			name:          "Y greater than 1",
-			path:          "testdata/pdf_handler_sample.pdf",
-			x:             0.5,
-			y:             10,
-			expectedError: "invalid input percentages: x=0.500000, y=10.000000",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			handler := setupPdfHandler(t)
-			document := openTestPDF(t, tt.path)
-
-			_, _, err := handler.LocationToPdfPoints(document, 0, tt.x, tt.y)
-			require.Error(t, err)
-			require.EqualError(t, err, tt.expectedError)
-		})
-	}
-}
-
-func TestPdfHandler_TestLocationToPdfPoint(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		path      string
-		X         float64
-		Y         float64
-		expectedX float64
-		expectedY float64
-	}{
-		{
-			"upper left",
-			"testdata/pdf_handler_sample.pdf",
-			0, 0,
-			0, 792.0,
-		},
-		{
-			"bottom right",
-			"testdata/pdf_handler_sample.pdf",
-			1, 1,
-			612.0, 0,
-		},
-		{
-			"Center of the page",
-			"testdata/pdf_handler_sample.pdf",
-			0.5, 0.5,
-			612.0 / 2, 792.0 / 2,
-		},
-		{
-			"upper left rotated",
-			"testdata/sample_rotate_90.pdf",
-			0, 0,
-			0, 612.0,
-		},
-		{
-			"bottom right rotated",
-			"testdata/sample_rotate_90.pdf",
-			1, 1,
-			792.0, 0,
-		},
-		{
-			"Center of the rotated page",
-			"testdata/sample_rotate_90.pdf",
-			0.5, 0.5,
-			792.0 / 2, 612.0 / 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			handler := setupPdfHandler(t)
-			document := openTestPDF(t, tt.path)
-
-			X, Y, err := handler.LocationToPdfPoints(
-				document,
-				0,
-				tt.X,
-				tt.Y,
-			)
-			require.NoError(t, err, "Failed to convert percentages relative to page dimensions to PDF Point for file: %s", tt.path)
-
-			require.InDelta(t, tt.expectedX, X, 0.1, "Unexpected x for file: %s", tt.path)
-			require.InDelta(t, tt.expectedY, Y, 0.1, "Unexpected y for file: %s", tt.path)
-		})
-	}
-}
-
 func TestPdfHandler_GetPageSize_InvalidPage(t *testing.T) {
 	t.Parallel()
 
@@ -690,7 +542,7 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 		params     TextParams
 	}{
 		{
-			name:       "Text - A4 - Portrait - Courier - 12",
+			name:       "Text - A4 - Portrait - Times New Roman - 12",
 			inputFile:  "testdata/pdf_handler_sample.pdf",
 			outputFile: "tmp/output_rotate_0_add_text_to_page.pdf",
 			params: TextParams{
@@ -699,15 +551,19 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 				Location: struct {
 					X float64
 					Y float64
-				}{X: 0, Y: 1 - 0.032},
+				}{X: 0, Y: 0.984},
+				Size: struct {
+					Width  float64
+					Height float64
+				}{Width: 0.7239, Height: 0.015},
 				Font: struct {
 					Family string
 					Size   float64
-				}{Family: "Courier", Size: 12},
+				}{Family: "Times New Roman", Size: 12},
 			},
 		},
 		{
-			name:       "Text - A4 - Landscape - Courier Italic - 8",
+			name:       "Text - A4 - Landscape - Times New Roman Italic - 8",
 			inputFile:  "testdata/sample_rotate_90.pdf",
 			outputFile: "tmp/output_rotate_90_add_text_to_page.pdf",
 			params: TextParams{
@@ -716,15 +572,19 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 				Location: struct {
 					X float64
 					Y float64
-				}{X: 0, Y: 1 - 0.016},
+				}{X: 0, Y: 0.9866},
+				Size: struct {
+					Width  float64
+					Height float64
+				}{Width: 0.0617, Height: 0.0134},
 				Font: struct {
 					Family string
 					Size   float64
-				}{Family: "Courier", Size: 8},
+				}{Family: "Times New Roman Italic", Size: 8},
 			},
 		},
 		{
-			name:       "Text - A4 - Landscape - Courier Bold - 8 - top right",
+			name:       "Text - A4 - Landscape - Times New Roman Bold - 8 - top right",
 			inputFile:  "testdata/sample_rotate_270.pdf",
 			outputFile: "tmp/output_rotate_270_add_text_to_page_top_right.pdf",
 			params: TextParams{
@@ -734,14 +594,18 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 					X float64
 					Y float64
 				}{X: 1 - 0.063, Y: 0},
+				Size: struct {
+					Width  float64
+					Height float64
+				}{Width: 0.0617, Height: 0.0134},
 				Font: struct {
 					Family string
 					Size   float64
-				}{Family: "Helvetica-BoldOblique", Size: 8},
+				}{Family: "Times New Roman Bold", Size: 8},
 			},
 		},
 		{
-			name:       "Text - A4 - Portrait - DejaVuSans Bold - 24 - top right",
+			name:       "Text - A4 - Portrait - Times New Roman - 24 - top right",
 			inputFile:  "testdata/sample_rotate_180.pdf",
 			outputFile: "tmp/output_rotate_180_add_text_to_page_top_right_24_fontsize.pdf",
 			params: TextParams{
@@ -751,10 +615,14 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 					X float64
 					Y float64
 				}{X: 1 - 0.294, Y: 0},
+				Size: struct {
+					Width  float64
+					Height float64
+				}{Width: 0.262, Height: 0.0285},
 				Font: struct {
 					Family string
 					Size   float64
-				}{Family: "DejaVuSans Bold", Size: 24},
+				}{Family: "Times New Roman", Size: 24},
 			},
 		},
 	}

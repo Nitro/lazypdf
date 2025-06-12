@@ -59,7 +59,11 @@ type TextParams struct {
 	//   (0,0) represents the upper-left corner.
 	//   (1,1) represents the bottom-right corner.
 	Location Location
-	Font     struct {
+	// Set the text bounding box size as a percentage of the page size:
+	//   0 represents zero size.
+	//   1 represents the full page width or height
+	Size Size
+	Font struct {
 		Family string
 		Size   float64 // In "Point" where 1 point = 1/72 inch
 	}
@@ -94,9 +98,11 @@ func savePayloadToTempFile(r io.Reader) (filename string, err error) {
 	}
 	defer tmpFile.Close()
 
-	_, err = io.Copy(tmpFile, r)
-	if err != nil {
-		os.Remove(tmpFile.Name())
+	if _, err = io.Copy(tmpFile, r); err != nil {
+		removeErr := os.Remove(tmpFile.Name())
+		if removeErr != nil {
+			return "", fmt.Errorf("failed to write payload to temp file: %w; also failed to remove temp file: %v", err, removeErr)
+		}
 		return "", fmt.Errorf("failed to write payload to temp file: %w", err)
 	}
 
@@ -116,20 +122,6 @@ func (p PdfHandler) LocationSizeToPdfPoints(document PdfDocument, page int, x, y
 		(1.0 - y - height) * pageSize.Height,
 		width * pageSize.Width,
 		height * pageSize.Height,
-		nil
-}
-
-// Percentages relative to page dimensions to PDF Point
-func (p PdfHandler) LocationToPdfPoints(document PdfDocument, page int, x, y float64) (float64, float64, error) {
-	pageSize, err := p.GetPageSize(document, page)
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get page size: %w", err)
-	}
-	if x < 0 || x > 1 || y < 0 || y > 1 {
-		return 0, 0, fmt.Errorf("invalid input percentages: x=%f, y=%f", x, y)
-	}
-	return x * pageSize.Width,
-		(1.0 - y) * pageSize.Height,
 		nil
 }
 
@@ -165,21 +157,28 @@ func (p PdfHandler) ClosePDF(document PdfDocument) error {
 		error:  nil,
 	}
 	output := C.close_pdf(pdf)
-	defer os.Remove(document.file)
+	removeErr := os.Remove(document.file)
 
+	var errs []error
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
-		return fmt.Errorf("failure at the C/MuPDF close_pdf function: %s", C.GoString(output.error))
+		errs = append(errs, fmt.Errorf("close_pdf failed: %s", C.GoString(output.error)))
+	}
+	if removeErr != nil {
+		errs = append(errs, fmt.Errorf("failed to remove temp file: %w", removeErr))
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	return nil
 }
 
-func (p PdfHandler) GetPageSize(document PdfDocument, page int) (PageSize, error) {
+func (p PdfHandler) GetPageSize(document PdfDocument, Page int) (PageSize, error) {
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
 	}
-	output := C.get_page_size(pdf, C.int(page))
+	output := C.get_page_size(pdf, C.int(Page))
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
 		return PageSize{}, fmt.Errorf("failure at the C/MuPDF get_page_size function: %s", C.GoString(output.error))
@@ -327,11 +326,13 @@ func (p PdfHandler) AddTextToPage(document PdfDocument, params TextParams) error
 		error:  nil,
 	}
 
-	x, y, err := p.LocationToPdfPoints(
+	x, y, _, _, err := p.LocationSizeToPdfPoints(
 		document,
 		params.Page,
 		params.Location.X,
 		params.Location.Y,
+		params.Size.Width,
+		params.Size.Height,
 	)
 	if err != nil {
 		return fmt.Errorf("failure at the AddTextToPage function: %s", err)
