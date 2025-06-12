@@ -55,6 +55,10 @@ jobs:
           go mod tidy
           git add .
           git diff --cached --exit-code
+          sudo apt-get update 
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections 
+	  sudo apt-get install --no-install-recommends --yes ttf-mscorefonts-installer 
+  	  sudo rm -rf /var/lib/apt/lists/*
 
       - name: Build
         run: go build .
