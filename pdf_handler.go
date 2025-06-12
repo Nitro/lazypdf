@@ -173,12 +173,12 @@ func (p PdfHandler) ClosePDF(document PdfDocument) error {
 	return nil
 }
 
-func (p PdfHandler) GetPageSize(document PdfDocument, Page int) (PageSize, error) {
+func (p PdfHandler) GetPageSize(document PdfDocument, page int) (PageSize, error) {
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
 	}
-	output := C.get_page_size(pdf, C.int(Page))
+	output := C.get_page_size(pdf, C.int(page))
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
 		return PageSize{}, fmt.Errorf("failure at the C/MuPDF get_page_size function: %s", C.GoString(output.error))
