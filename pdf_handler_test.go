@@ -1,3 +1,4 @@
+// nolint
 package lazypdf
 
 import (
@@ -1221,7 +1222,7 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer handler.ClosePDF(document)
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			for _, operation := range tt.operations {
 				err := operation(handler, document)
