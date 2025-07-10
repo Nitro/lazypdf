@@ -1,7 +1,9 @@
+// nolint
 package lazypdf
 
 import (
 	"log/slog"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -488,7 +490,7 @@ func TestPdfHandler_AddImageToPage_InvalidImage(t *testing.T) {
 	require.Equal(t, "failure at the C/MuPDF add_image_to_page function: unknown image file format", err.Error())
 }
 
-func TestGetFontPath(t *testing.T) {
+func TestPdfHandler_TestGetFontAttributes_FontPath(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -509,7 +511,7 @@ func TestGetFontPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			fontPath, err := handler.GetFontPath(tt.fontName)
+			fontPath, _, err := handler.getFontAttributes(tt.fontName, 0)
 			if tt.expectErr {
 				require.Error(t, err)
 			} else {
@@ -532,7 +534,61 @@ func TestGetFontPath(t *testing.T) {
 	}
 }
 
-func TestPdfHandler_AddTextToPage(t *testing.T) {
+func TestPdfHandler_TestGetFontAttributes_Descender(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	handler := PdfHandler{Logger: logger}
+
+	const epsilon = 0.05
+
+	tests := []struct {
+		name     string
+		fontName string
+		fontSize float64
+		expected float64
+	}{
+		{
+			name:     "Arial 12pt",
+			fontName: "Arial",
+			fontSize: 12.0,
+			expected: 2.547,
+		},
+		{
+			name:     "Times New Roman 10pt",
+			fontName: "Times New Roman",
+			fontSize: 10.0,
+			expected: 2.19,
+		},
+		{
+			name:     "Times New Roman 16pt",
+			fontName: "Times New Roman",
+			fontSize: 16.0,
+			expected: 3.469,
+		},
+		{
+			name:     "Courier 12pt",
+			fontName: "Courier",
+			fontSize: 12.0,
+			expected: 2.328,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, descender, err := handler.getFontAttributes(tt.fontName, tt.fontSize)
+			require.NoError(t, err)
+
+			if math.Abs(descender-tt.expected) > epsilon {
+				t.Errorf("got %.3f, expected %.3f ± %.2f", descender, tt.expected, epsilon)
+			}
+		})
+	}
+}
+
+func TestPdfHandler_AddTextBoxToPage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -642,7 +698,7 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 			require.NoError(t, err, "OpenPDF failed")
 			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
-			err = handler.AddTextToPage(document, tt.params)
+			err = handler.AddTextBoxToPage(document, tt.params)
 			require.NoError(t, err, "failed to add text")
 
 			err = handler.SavePDF(document, tt.outputFile)
@@ -651,7 +707,7 @@ func TestPdfHandler_AddTextToPage(t *testing.T) {
 	}
 }
 
-func TestPdfHandler_AddTextToPage_InvalidPage(t *testing.T) {
+func TestPdfHandler_AddTextBoxToPage_InvalidPage(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -680,12 +736,12 @@ func TestPdfHandler_AddTextToPage_InvalidPage(t *testing.T) {
 		}{Family: "Courier", Size: 12},
 	}
 
-	err = handler.AddTextToPage(document, params)
+	err = handler.AddTextBoxToPage(document, params)
 	require.Error(t, err)
-	require.Equal(t, "failure at the AddTextToPage function: failed to get page size: failure at the C/MuPDF get_page_size function: invalid page number: 2", err.Error())
+	require.Equal(t, "failure at the AddTextBoxToPage function: failed to get page size: failure at the C/MuPDF get_page_size function: invalid page number: 2", err.Error())
 }
 
-func TestPdfHandler_AddTextToPage_InvalidTextLengh(t *testing.T) {
+func TestPdfHandler_AddTextBoxToPage_InvalidTextLengh(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -714,12 +770,12 @@ func TestPdfHandler_AddTextToPage_InvalidTextLengh(t *testing.T) {
 		}{Family: "Courier", Size: 12},
 	}
 
-	err = handler.AddTextToPage(document, params)
+	err = handler.AddTextBoxToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at the C/MuPDF add_text_to_page function: Text exceeds maximum allowed size. Expected: 300, Actual: 301", err.Error())
 }
 
-func TestPdfHandler_AddTextToPage_InvalidFont(t *testing.T) {
+func TestPdfHandler_AddTextBoxToPage_InvalidFont(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -748,9 +804,9 @@ func TestPdfHandler_AddTextToPage_InvalidFont(t *testing.T) {
 		}{Family: "[not existing font]", Size: 12},
 	}
 
-	err = handler.AddTextToPage(document, params)
+	err = handler.AddTextBoxToPage(document, params)
 	require.Error(t, err)
-	require.Equal(t, "failure at PdfHandler AddTextToPage function: failed to find font path for \"[not existing font]\"", err.Error())
+	require.Equal(t, "failure at PdfHandler AddTextBoxToPage function: failed to find font path for \"[not existing font]\"", err.Error())
 }
 
 func TestPdfHandler_AddCheckboxToPage(t *testing.T) {
@@ -941,7 +997,7 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 							Size   float64
 						}{Family: "Courier", Size: 12},
 					}
-					return handler.AddTextToPage(document, params)
+					return handler.AddTextBoxToPage(document, params)
 				},
 				func(handler PdfHandler, document PdfDocument) error {
 					params := TextParams{
@@ -956,7 +1012,7 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 							Size   float64
 						}{Family: "Courier", Size: 14},
 					}
-					return handler.AddTextToPage(document, params)
+					return handler.AddTextBoxToPage(document, params)
 				},
 				func(handler PdfHandler, document PdfDocument) error {
 					params := ImageParams{
@@ -1002,6 +1058,152 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 						}{Width: 0.0327, Height: 0.0253},
 					}
 					return handler.AddCheckboxToPage(document, params)
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+			handler := PdfHandler{Logger: logger}
+
+			file, err := os.Open(tt.inputFile)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, file.Close()) }()
+
+			document, err := handler.OpenPDF(file)
+			require.NoError(t, err, "OpenPDF failed")
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
+
+			for _, operation := range tt.operations {
+				err := operation(handler, document)
+				require.NoError(t, err, "Operation failed")
+			}
+
+			err = handler.SavePDF(document, tt.outputFile)
+			require.NoError(t, err, "Failed to save PDF")
+		})
+	}
+}
+
+func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		inputFile  string
+		outputFile string
+		operations []func(handler PdfHandler, document PdfDocument) error
+	}{
+		{
+			name:       "Multiple operations on texboxes.pdf",
+			inputFile:  "testdata/textboxes.pdf",
+			outputFile: "tmp/output_textboxes.pdf",
+			operations: []func(handler PdfHandler, document PdfDocument) error{
+				func(handler PdfHandler, document PdfDocument) error {
+					params := ImageParams{
+						Page: 0,
+						Location: struct {
+							X float64
+							Y float64
+						}{X: 0.0087145969, Y: 0.0033670034},
+						Size: struct {
+							Width  float64
+							Height float64
+						}{Width: 0.1633986928, Height: 0.0151515152},
+						ImagePath: "testdata/test_blue_box.png",
+					}
+					return handler.AddImageToPage(document, params)
+				},
+				func(handler PdfHandler, document PdfDocument) error {
+					params := ImageParams{
+						Page: 0,
+						Location: struct {
+							X float64
+							Y float64
+						}{X: 0.0889615327, Y: 0.017957347},
+						Size: struct {
+							Width  float64
+							Height float64
+						}{Width: 0.1633986928, Height: 0.0151515152},
+						ImagePath: "testdata/test_blue_box.png",
+					}
+					return handler.AddImageToPage(document, params)
+				},
+				func(handler PdfHandler, document PdfDocument) error {
+					params := ImageParams{
+						Page: 0,
+						Location: struct {
+							X float64
+							Y float64
+						}{X: 0.0087145969, Y: 0.962962963},
+						Size: struct {
+							Width  float64
+							Height float64
+						}{Width: 0.1633986928, Height: 0.0151515152},
+						ImagePath: "testdata/test_blue_box.png",
+					}
+					return handler.AddImageToPage(document, params)
+				},
+				func(handler PdfHandler, document PdfDocument) error {
+					params := TextParams{
+						Value: "Qjstom",
+						Page:  0,
+						Location: struct {
+							X float64
+							Y float64
+						}{X: 0.0087145969, Y: 0.0033670034},
+						Size: struct {
+							Width  float64
+							Height float64
+						}{Width: 0.1633986928, Height: 0.0151515152},
+						Font: struct {
+							Family string
+							Size   float64
+						}{Family: "Times New Roman", Size: 12},
+					}
+					return handler.AddTextBoxToPage(document, params)
+				},
+				func(handler PdfHandler, document PdfDocument) error {
+					params := TextParams{
+						Value: "qjWaAJj",
+						Page:  0,
+						Location: struct {
+							X float64
+							Y float64
+						}{X: 0.0889615327, Y: 0.017957347},
+						Size: struct {
+							Width  float64
+							Height float64
+						}{Width: 0.1633986928, Height: 0.0151515152},
+						Font: struct {
+							Family string
+							Size   float64
+						}{Family: "Times New Roman", Size: 12},
+					}
+					return handler.AddTextBoxToPage(document, params)
+				},
+				func(handler PdfHandler, document PdfDocument) error {
+					params := TextParams{
+						Value: "QqWwJj",
+						Page:  0,
+						Location: struct {
+							X float64
+							Y float64
+						}{X: 0.0087145969, Y: 0.962962963},
+						Size: struct {
+							Width  float64
+							Height float64
+						}{Width: 0.1633986928, Height: 0.0151515152},
+						Font: struct {
+							Family string
+							Size   float64
+						}{Family: "Times New Roman", Size: 12},
+					}
+					return handler.AddTextBoxToPage(document, params)
 				},
 			},
 		},

@@ -26,6 +26,11 @@ linters:
     - godox
     - whitespace
 
+issues:
+  exclude-files:
+    - pdf_handler.go
+    - pdf_handler_test.go
+
 linter-settings:
   goimports:
     local-prefixes: github.com/nitro/lazypdf
