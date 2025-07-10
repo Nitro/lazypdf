@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"unsafe"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/sfnt"
+	"golang.org/x/image/math/fixed"
 )
 
 /*
@@ -87,6 +93,26 @@ type PageSize struct {
 	Height float64 // In "Point" where 1 point = 1/72 inch
 }
 
+var standardFontList = []struct {
+	Name      string
+	Descender float64
+}{
+	{"Courier", -194},
+	{"Courier-Oblique", -194},
+	{"Courier-Bold", -194},
+	{"Courier-BoldOblique", -194},
+	{"Helvetica", -207},
+	{"Helvetica-Oblique", -207},
+	{"Helvetica-Bold", -207},
+	{"Helvetica-BoldOblique", -207},
+	{"Times-Roman", -219},
+	{"Times-Italic", -217},
+	{"Times-Bold", -218},
+	{"Times-BoldItalic", -222},
+	{"Symbol", -293},
+	{"ZapfDingbats", -143},
+}
+
 func savePayloadToTempFile(r io.Reader) (filename string, err error) {
 	if r == nil {
 		return "", errors.New("payload can't be nil")
@@ -137,7 +163,6 @@ func (p PdfHandler) OpenPDF(rawPayload io.Reader) (PdfDocument, error) {
 	input := C.openPDFInput{
 		filename: cFilename,
 	}
-
 	output := C.open_pdf(input)
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -229,6 +254,42 @@ func (p PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) err
 	return nil
 }
 
+var (
+	fontMetricsCache = make(map[string]*sfnt.Font)
+	fontCacheMu      sync.RWMutex
+)
+
+func GetDescenderToBaselineFromTTF(ttfPath string, fontSize float64) (float64, error) {
+	fontCacheMu.RLock()
+	cachedFont, exists := fontMetricsCache[ttfPath]
+	fontCacheMu.RUnlock()
+
+	if !exists {
+		fontData, err := os.ReadFile(ttfPath)
+		if err != nil {
+			return 0, fmt.Errorf("failed to read font: %w", err)
+		}
+
+		parsedFont, err := sfnt.Parse(fontData)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse font: %w", err)
+		}
+
+		fontCacheMu.Lock()
+		fontMetricsCache[ttfPath] = parsedFont
+		fontCacheMu.Unlock()
+		cachedFont = parsedFont
+	}
+
+	var buf sfnt.Buffer
+	metrics, err := cachedFont.Metrics(&buf, fixed.Int26_6(fontSize*64), font.HintingNone)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get metrics: %w", err)
+	}
+
+	return math.Abs(float64(metrics.Descent) / 64.0), nil
+}
+
 func (p PdfHandler) generateFontCandidates(font string) []string {
 	exts := []string{".ttf", ".otf"}
 
@@ -244,38 +305,18 @@ func (p PdfHandler) generateFontCandidates(font string) []string {
 			unique[transform(font)+ext] = struct{}{}
 		}
 	}
-	candidates := make([]string, 0, len(unique))
+	var candidates []string
 	for key := range unique {
 		candidates = append(candidates, key)
 	}
 	return candidates
 }
 
-func IsStandardFont(name string) bool {
-	standardFonts := map[string]struct{}{
-		"Courier":               {},
-		"Courier-Oblique":       {},
-		"Courier-Bold":          {},
-		"Courier-BoldOblique":   {},
-		"Helvetica":             {},
-		"Helvetica-Oblique":     {},
-		"Helvetica-Bold":        {},
-		"Helvetica-BoldOblique": {},
-		"Times-Roman":           {},
-		"Times-Italic":          {},
-		"Times-Bold":            {},
-		"Times-BoldItalic":      {},
-		"Symbol":                {},
-		"ZapfDingbats":          {},
-	}
-
-	_, exists := standardFonts[name]
-	return exists
-}
-
-func (p PdfHandler) GetFontPath(font string) (string, error) {
-	if IsStandardFont(font) {
-		return "", nil // Standard fonts do not need a file path
+func (p PdfHandler) getFontAttributes(font string, fontSize float64) (fontPath string, descender float64, err error) {
+	for _, f := range standardFontList {
+		if f.Name == font {
+			return "", math.Abs(f.Descender / 1000.0 * fontSize), nil // Standard fonts do not need a file path
+		}
 	}
 
 	candidates := p.generateFontCandidates(font)
@@ -306,19 +347,23 @@ func (p PdfHandler) GetFontPath(font string) (string, error) {
 			return nil
 		})
 		if err != nil && err != filepath.SkipDir {
-			return "", err
+			return "", 0, err
 		}
 		if path != "" {
-			return path, nil
+			descender, err := GetDescenderToBaselineFromTTF(path, fontSize)
+			if err != nil {
+				return "", 0, fmt.Errorf("failed to compute descender: %w", err)
+			}
+			return path, descender, nil
 		}
 	}
-	return "", fmt.Errorf("font %q not found", font)
+	return "", 0, fmt.Errorf("font %q not found", font)
 }
 
-func (p PdfHandler) AddTextToPage(document PdfDocument, params TextParams) error {
-	fontPath, err := p.GetFontPath(params.Font.Family)
+func (p PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) error {
+	fontPath, descender, err := p.getFontAttributes(params.Font.Family, params.Font.Size)
 	if err != nil {
-		return fmt.Errorf("failure at PdfHandler AddTextToPage function: failed to find font path for %q", params.Font.Family)
+		return fmt.Errorf("failure at PdfHandler AddTextBoxToPage function: failed to find font path for %q", params.Font.Family)
 	}
 
 	pdf := C.pdfDocument{
@@ -335,8 +380,12 @@ func (p PdfHandler) AddTextToPage(document PdfDocument, params TextParams) error
 		params.Size.Height,
 	)
 	if err != nil {
-		return fmt.Errorf("failure at the AddTextToPage function: %s", err)
+		return fmt.Errorf("failure at the AddTextBoxToPage function: %s", err)
 	}
+	// In PDFs, text positioning is based on the baseline
+	// However, the client provides the Y position as the top-left corner of the text box, along with its height.
+	// To align the text correctly, we need to adjust the Y coordinate so that the descender sits at the bottom of the provided box.
+	y = y + descender
 
 	cText := C.CString(params.Value)
 	defer C.free(unsafe.Pointer(cText))
@@ -402,7 +451,7 @@ func (p PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParam
 
 	output := C.add_checkbox_to_page(pdf, input)
 	if output.error != nil {
-		defer C.free(unsafe.Pointer(output.error))
+		defer C.je_free(unsafe.Pointer(output.error))
 		return fmt.Errorf("failure at the C/MuPDF add_checkbox_to_page function: %s", C.GoString(output.error))
 	}
 
