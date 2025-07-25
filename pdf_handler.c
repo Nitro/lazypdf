@@ -609,10 +609,12 @@ savePDFOutput save_pdf(pdfDocument document, const char *file_path) {
 
         pdf_write_options options = pdf_default_write_options;
         options.do_compress = 1;
-        options.do_compress_images = 1;
-        options.do_compress_fonts = 1;
-        options.do_garbage = 3;
-
+        options.do_compress_images = 0;   // avoid recompressing image streams
+        options.do_compress_fonts = 0;    // keep original font streams
+        options.do_garbage = 1;           // remove dead objects only (not full rewrite)
+        options.do_linear = 0;            // skip linearization (web optimization)
+        options.do_incremental = 0;       // write clean file, but not in-place update
+        
         pdf_save_document(ctx, doc, file_path, &options);
     }
     fz_catch(ctx) {
