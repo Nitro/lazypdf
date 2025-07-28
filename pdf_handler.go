@@ -2,6 +2,7 @@
 package lazypdf
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,11 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
+	ddTracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 /*
@@ -29,6 +32,21 @@ import "C"
 
 type PdfHandler struct {
 	Logger *slog.Logger
+	ctx    context.Context
+}
+
+// NewPdfHandler creates a new PdfHandler with the given context and logger
+func NewPdfHandler(ctx context.Context, logger *slog.Logger) *PdfHandler {
+	return &PdfHandler{
+		Logger: logger,
+		ctx:    ctx,
+	}
+}
+
+// NewPdfHandlerWithLogger creates a new PdfHandler with background context and the given logger
+// Deprecated: Use NewPdfHandler instead
+func NewPdfHandlerWithLogger(logger *slog.Logger) *PdfHandler {
+	return NewPdfHandler(context.Background(), logger)
 }
 
 type PdfDocument struct {
@@ -114,7 +132,10 @@ var standardFontList = []struct {
 	{"ZapfDingbats", -143},
 }
 
-func savePayloadToTempFile(r io.Reader) (filename string, err error) {
+func savePayloadToTempFile(ctx context.Context, r io.Reader) (filename string, err error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "savePayloadToTempFile")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	if r == nil {
 		return "", errors.New("payload can't be nil")
 	}
@@ -137,8 +158,11 @@ func savePayloadToTempFile(r io.Reader) (filename string, err error) {
 }
 
 // Percentages relative to page dimensions to PDF Point
-func (p PdfHandler) LocationSizeToPdfPoints(document PdfDocument, page int, x, y, width, height float64) (float64, float64, float64, float64, error) {
-	pageSize, err := p.GetPageSize(document, page)
+func (p *PdfHandler) LocationSizeToPdfPoints(ctx context.Context, document PdfDocument, page int, x, y, width, height float64) (float64, float64, float64, float64, error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.LocationSizeToPdfPoints")
+	defer span.Finish()
+
+	pageSize, err := p.GetPageSizeWithContext(ctx, document, page)
 	if err != nil {
 		return 0, 0, 0, 0, fmt.Errorf("failed to get page size: %w", err)
 	}
@@ -152,8 +176,11 @@ func (p PdfHandler) LocationSizeToPdfPoints(document PdfDocument, page int, x, y
 		nil
 }
 
-func (p PdfHandler) OpenPDF(rawPayload io.Reader) (PdfDocument, error) {
-	filename, err := savePayloadToTempFile(rawPayload)
+func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err error) {
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.OpenPDF")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	filename, err := savePayloadToTempFile(ctx, rawPayload)
 	if err != nil {
 		return PdfDocument{}, err
 	}
@@ -164,9 +191,19 @@ func (p PdfHandler) OpenPDF(rawPayload io.Reader) (PdfDocument, error) {
 	input := C.openPDFInput{
 		filename: cFilename,
 	}
+
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.open_pdf(input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "open_pdf")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return PdfDocument{}, fmt.Errorf("failure at the C/MuPDF open_pdf function: %s", C.GoString(output.error))
 	}
 
@@ -177,17 +214,30 @@ func (p PdfHandler) OpenPDF(rawPayload io.Reader) (PdfDocument, error) {
 	return pdf, nil
 }
 
-func (p PdfHandler) ClosePDF(document PdfDocument) error {
+func (p *PdfHandler) ClosePDF(document PdfDocument) (err error) {
+	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.ClosePDF")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
 	}
+
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.close_pdf(pdf)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "close_pdf")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	removeErr := os.Remove(document.file)
 
 	var errs []error
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		errs = append(errs, fmt.Errorf("close_pdf failed: %s", C.GoString(output.error)))
 	}
 	if removeErr != nil {
@@ -199,24 +249,48 @@ func (p PdfHandler) ClosePDF(document PdfDocument) error {
 	return nil
 }
 
-func (p PdfHandler) GetPageSize(document PdfDocument, page int) (PageSize, error) {
+func (p *PdfHandler) GetPageSize(document PdfDocument, page int) (pageSize PageSize, err error) {
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.GetPageSize")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	return p.GetPageSizeWithContext(ctx, document, page)
+}
+
+func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDocument, page int) (pageSize PageSize, err error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.GetPageSize")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
 	}
+
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.get_page_size(pdf, C.int(page))
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "get_page_size")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return PageSize{}, fmt.Errorf("failure at the C/MuPDF get_page_size function: %s", C.GoString(output.error))
 	}
-	pageSize := PageSize{
+	pageSize = PageSize{
 		Width:  float64(output.width),
 		Height: float64(output.height),
 	}
+
 	return pageSize, nil
 }
 
-func (p PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) error {
+func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (err error) {
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddImageToPage")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	cImagePath := C.CString(params.ImagePath)
 	defer C.free(unsafe.Pointer(cImagePath))
 
@@ -226,6 +300,7 @@ func (p PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) err
 	}
 
 	x, y, width, height, err := p.LocationSizeToPdfPoints(
+		ctx,
 		document,
 		params.Page,
 		params.Location.X,
@@ -246,9 +321,18 @@ func (p PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) err
 		height: C.float(height),
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.add_image_to_page(pdf, input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "add_image_to_page")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF add_image_to_page function: %s", C.GoString(output.error))
 	}
 
@@ -260,7 +344,10 @@ var (
 	fontCacheMu      sync.RWMutex
 )
 
-func GetDescenderToBaselineFromTTF(ttfPath string, fontSize float64) (float64, error) {
+func GetDescenderToBaselineFromTTF(ctx context.Context, ttfPath string, fontSize float64) (float64, error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "GetDescenderToBaselineFromTTF")
+	defer span.Finish()
+
 	fontCacheMu.RLock()
 	cachedFont, exists := fontMetricsCache[ttfPath]
 	fontCacheMu.RUnlock()
@@ -291,7 +378,10 @@ func GetDescenderToBaselineFromTTF(ttfPath string, fontSize float64) (float64, e
 	return math.Abs(float64(metrics.Descent) / 64.0), nil
 }
 
-func (p PdfHandler) generateFontCandidates(font string) []string {
+func (p *PdfHandler) generateFontCandidates(ctx context.Context, font string) []string {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.generateFontCandidates")
+	defer span.Finish()
+
 	exts := []string{".ttf", ".otf"}
 
 	unique := make(map[string]struct{})
@@ -313,14 +403,17 @@ func (p PdfHandler) generateFontCandidates(font string) []string {
 	return candidates
 }
 
-func (p PdfHandler) getFontAttributes(font string, fontSize float64) (fontPath string, descender float64, err error) {
+func (p *PdfHandler) getFontAttributes(ctx context.Context, font string, fontSize float64) (fontPath string, descender float64, err error) {
+	span, childCtx := ddTracer.StartSpanFromContext(ctx, "PdfHandler.getFontAttributes")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	for _, f := range standardFontList {
 		if f.Name == font {
 			return "", math.Abs(f.Descender / 1000.0 * fontSize), nil // Standard fonts do not need a file path
 		}
 	}
 
-	candidates := p.generateFontCandidates(font)
+	candidates := p.generateFontCandidates(childCtx, font)
 	dirs := []string{
 		"/usr/share/fonts",      // System-wide fonts (Linux)
 		"~/.fonts",              // User fonts (Linux)
@@ -351,7 +444,7 @@ func (p PdfHandler) getFontAttributes(font string, fontSize float64) (fontPath s
 			return "", 0, err
 		}
 		if path != "" {
-			descender, err := GetDescenderToBaselineFromTTF(path, fontSize)
+			descender, err := GetDescenderToBaselineFromTTF(childCtx, path, fontSize)
 			if err != nil {
 				return "", 0, fmt.Errorf("failed to compute descender: %w", err)
 			}
@@ -361,8 +454,11 @@ func (p PdfHandler) getFontAttributes(font string, fontSize float64) (fontPath s
 	return "", 0, fmt.Errorf("font %q not found", font)
 }
 
-func (p PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) error {
-	fontPath, descender, err := p.getFontAttributes(params.Font.Family, params.Font.Size)
+func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (err error) {
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddTextBoxToPage")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	fontPath, descender, err := p.getFontAttributes(ctx, params.Font.Family, params.Font.Size)
 	if err != nil {
 		return fmt.Errorf("failure at PdfHandler AddTextBoxToPage function: failed to find font path for %q", params.Font.Family)
 	}
@@ -373,6 +469,7 @@ func (p PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) er
 	}
 
 	x, y, _, _, err := p.LocationSizeToPdfPoints(
+		ctx,
 		document,
 		params.Page,
 		params.Location.X,
@@ -407,9 +504,18 @@ func (p PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) er
 		font_size:   C.float(params.Font.Size),
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.add_text_to_page(pdf, input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "add_text_to_page")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF add_text_to_page function: %s", C.GoString(output.error))
 	}
 
@@ -423,13 +529,17 @@ func boolToInt(value bool) int {
 	return 0
 }
 
-func (p PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParams) error {
+func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParams) (err error) {
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddCheckboxToPage")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	pdf := C.pdfDocument{
 		handle: document.handle,
 		error:  nil,
 	}
 
 	x, y, width, height, err := p.LocationSizeToPdfPoints(
+		ctx,
 		document,
 		params.Page,
 		params.Location.X,
@@ -450,16 +560,28 @@ func (p PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParam
 		height: C.float(height),
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.add_checkbox_to_page(pdf, input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "add_checkbox_to_page")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF add_checkbox_to_page function: %s", C.GoString(output.error))
 	}
 
 	return nil
 }
 
-func (p PdfHandler) SavePDF(document PdfDocument, filePath string) error {
+func (p *PdfHandler) SavePDF(document PdfDocument, filePath string) (err error) {
+	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.SavePDF")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	cFilePath := C.CString(filePath)
 	defer C.free(unsafe.Pointer(cFilePath))
 
@@ -468,9 +590,18 @@ func (p PdfHandler) SavePDF(document PdfDocument, filePath string) error {
 		error:  nil,
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.save_pdf(pdf, cFilePath)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "save_pdf")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF save_pdf function: %s", C.GoString(output.error))
 	}
 

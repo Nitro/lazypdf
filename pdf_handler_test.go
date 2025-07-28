@@ -2,6 +2,7 @@
 package lazypdf
 
 import (
+	"context"
 	"log/slog"
 	"math"
 	"os"
@@ -94,6 +95,7 @@ func TestPdfHandler_LocationSizeToPdfPoints_InvalidPage(t *testing.T) {
 
 	//nolint:dogsled // we only care about the error
 	_, _, _, _, err = handler.LocationSizeToPdfPoints(
+		context.Background(),
 		document,
 		2,
 		0,
@@ -160,7 +162,7 @@ func TestPdfHandler_LocationSizeToPdfPoints_InvalidInputPercentages(t *testing.T
 			handler := setupPdfHandler(t)
 			document := openTestPDF(t, tt.path)
 
-			_, _, _, _, err := handler.LocationSizeToPdfPoints(document, 0, tt.x, tt.y, tt.width, tt.height)
+			_, _, _, _, err := handler.LocationSizeToPdfPoints(context.Background(), document, 0, tt.x, tt.y, tt.width, tt.height)
 			require.Error(t, err)
 			require.EqualError(t, err, tt.expectedError)
 		})
@@ -228,6 +230,7 @@ func TestPdfHandler_TestLocationSizeToPdfPoints(t *testing.T) {
 			handle := openTestPDF(t, tt.path)
 
 			X, Y, Width, Height, err := handler.LocationSizeToPdfPoints(
+				context.Background(),
 				handle,
 				0,
 				tt.X,
@@ -511,7 +514,7 @@ func TestPdfHandler_TestGetFontAttributes_FontPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			fontPath, _, err := handler.getFontAttributes(tt.fontName, 0)
+			fontPath, _, err := handler.getFontAttributes(context.Background(), tt.fontName, 0)
 			if tt.expectErr {
 				require.Error(t, err)
 			} else {
@@ -578,7 +581,7 @@ func TestPdfHandler_TestGetFontAttributes_Descender(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, descender, err := handler.getFontAttributes(tt.fontName, tt.fontSize)
+			_, descender, err := handler.getFontAttributes(context.Background(), tt.fontName, tt.fontSize)
 			require.NoError(t, err)
 
 			if math.Abs(descender-tt.expected) > epsilon {
