@@ -132,7 +132,10 @@ var standardFontList = []struct {
 	{"ZapfDingbats", -143},
 }
 
-func savePayloadToTempFile(r io.Reader) (filename string, err error) {
+func savePayloadToTempFile(ctx context.Context, r io.Reader) (filename string, err error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "savePayloadToTempFile")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	if r == nil {
 		return "", errors.New("payload can't be nil")
 	}
@@ -155,8 +158,11 @@ func savePayloadToTempFile(r io.Reader) (filename string, err error) {
 }
 
 // Percentages relative to page dimensions to PDF Point
-func (p *PdfHandler) LocationSizeToPdfPoints(document PdfDocument, page int, x, y, width, height float64) (float64, float64, float64, float64, error) {
-	pageSize, err := p.GetPageSize(document, page)
+func (p *PdfHandler) LocationSizeToPdfPoints(ctx context.Context, document PdfDocument, page int, x, y, width, height float64) (float64, float64, float64, float64, error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.LocationSizeToPdfPoints")
+	defer span.Finish()
+
+	pageSize, err := p.GetPageSizeWithContext(ctx, document, page)
 	if err != nil {
 		return 0, 0, 0, 0, fmt.Errorf("failed to get page size: %w", err)
 	}
@@ -171,10 +177,10 @@ func (p *PdfHandler) LocationSizeToPdfPoints(document PdfDocument, page int, x, 
 }
 
 func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err error) {
-	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.OpenPDF")
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.OpenPDF")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
-	filename, err := savePayloadToTempFile(rawPayload)
+	filename, err := savePayloadToTempFile(ctx, rawPayload)
 	if err != nil {
 		return PdfDocument{}, err
 	}
@@ -244,7 +250,14 @@ func (p *PdfHandler) ClosePDF(document PdfDocument) (err error) {
 }
 
 func (p *PdfHandler) GetPageSize(document PdfDocument, page int) (pageSize PageSize, err error) {
-	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.GetPageSize")
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.GetPageSize")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	return p.GetPageSizeWithContext(ctx, document, page)
+}
+
+func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDocument, page int) (pageSize PageSize, err error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.GetPageSize")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
 	pdf := C.pdfDocument{
@@ -275,7 +288,7 @@ func (p *PdfHandler) GetPageSize(document PdfDocument, page int) (pageSize PageS
 }
 
 func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (err error) {
-	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddImageToPage")
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddImageToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
 	cImagePath := C.CString(params.ImagePath)
@@ -287,6 +300,7 @@ func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (e
 	}
 
 	x, y, width, height, err := p.LocationSizeToPdfPoints(
+		ctx,
 		document,
 		params.Page,
 		params.Location.X,
@@ -330,7 +344,10 @@ var (
 	fontCacheMu      sync.RWMutex
 )
 
-func GetDescenderToBaselineFromTTF(ttfPath string, fontSize float64) (float64, error) {
+func GetDescenderToBaselineFromTTF(ctx context.Context, ttfPath string, fontSize float64) (float64, error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "GetDescenderToBaselineFromTTF")
+	defer span.Finish()
+
 	fontCacheMu.RLock()
 	cachedFont, exists := fontMetricsCache[ttfPath]
 	fontCacheMu.RUnlock()
@@ -361,7 +378,10 @@ func GetDescenderToBaselineFromTTF(ttfPath string, fontSize float64) (float64, e
 	return math.Abs(float64(metrics.Descent) / 64.0), nil
 }
 
-func (p *PdfHandler) generateFontCandidates(font string) []string {
+func (p *PdfHandler) generateFontCandidates(ctx context.Context, font string) []string {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.generateFontCandidates")
+	defer span.Finish()
+
 	exts := []string{".ttf", ".otf"}
 
 	unique := make(map[string]struct{})
@@ -383,14 +403,17 @@ func (p *PdfHandler) generateFontCandidates(font string) []string {
 	return candidates
 }
 
-func (p *PdfHandler) getFontAttributes(font string, fontSize float64) (fontPath string, descender float64, err error) {
+func (p *PdfHandler) getFontAttributes(ctx context.Context, font string, fontSize float64) (fontPath string, descender float64, err error) {
+	span, childCtx := ddTracer.StartSpanFromContext(ctx, "PdfHandler.getFontAttributes")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	for _, f := range standardFontList {
 		if f.Name == font {
 			return "", math.Abs(f.Descender / 1000.0 * fontSize), nil // Standard fonts do not need a file path
 		}
 	}
 
-	candidates := p.generateFontCandidates(font)
+	candidates := p.generateFontCandidates(childCtx, font)
 	dirs := []string{
 		"/usr/share/fonts",      // System-wide fonts (Linux)
 		"~/.fonts",              // User fonts (Linux)
@@ -421,7 +444,7 @@ func (p *PdfHandler) getFontAttributes(font string, fontSize float64) (fontPath 
 			return "", 0, err
 		}
 		if path != "" {
-			descender, err := GetDescenderToBaselineFromTTF(path, fontSize)
+			descender, err := GetDescenderToBaselineFromTTF(childCtx, path, fontSize)
 			if err != nil {
 				return "", 0, fmt.Errorf("failed to compute descender: %w", err)
 			}
@@ -432,10 +455,10 @@ func (p *PdfHandler) getFontAttributes(font string, fontSize float64) (fontPath 
 }
 
 func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (err error) {
-	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddTextBoxToPage")
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddTextBoxToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
-	fontPath, descender, err := p.getFontAttributes(params.Font.Family, params.Font.Size)
+	fontPath, descender, err := p.getFontAttributes(ctx, params.Font.Family, params.Font.Size)
 	if err != nil {
 		return fmt.Errorf("failure at PdfHandler AddTextBoxToPage function: failed to find font path for %q", params.Font.Family)
 	}
@@ -446,6 +469,7 @@ func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (
 	}
 
 	x, y, _, _, err := p.LocationSizeToPdfPoints(
+		ctx,
 		document,
 		params.Page,
 		params.Location.X,
@@ -506,7 +530,7 @@ func boolToInt(value bool) int {
 }
 
 func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParams) (err error) {
-	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddCheckboxToPage")
+	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddCheckboxToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
 	pdf := C.pdfDocument{
@@ -515,6 +539,7 @@ func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxPara
 	}
 
 	x, y, width, height, err := p.LocationSizeToPdfPoints(
+		ctx,
 		document,
 		params.Page,
 		params.Location.X,
