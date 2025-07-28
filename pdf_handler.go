@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"golang.org/x/image/font"
@@ -184,9 +185,19 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err er
 	input := C.openPDFInput{
 		filename: cFilename,
 	}
+
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.open_pdf(input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "open_pdf")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return PdfDocument{}, fmt.Errorf("failure at the C/MuPDF open_pdf function: %s", C.GoString(output.error))
 	}
 
@@ -205,12 +216,22 @@ func (p *PdfHandler) ClosePDF(document PdfDocument) (err error) {
 		handle: document.handle,
 		error:  nil,
 	}
+
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.close_pdf(pdf)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "close_pdf")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	removeErr := os.Remove(document.file)
 
 	var errs []error
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		errs = append(errs, fmt.Errorf("close_pdf failed: %s", C.GoString(output.error)))
 	}
 	if removeErr != nil {
@@ -230,15 +251,26 @@ func (p *PdfHandler) GetPageSize(document PdfDocument, page int) (pageSize PageS
 		handle: document.handle,
 		error:  nil,
 	}
+
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.get_page_size(pdf, C.int(page))
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "get_page_size")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return PageSize{}, fmt.Errorf("failure at the C/MuPDF get_page_size function: %s", C.GoString(output.error))
 	}
 	pageSize = PageSize{
 		Width:  float64(output.width),
 		Height: float64(output.height),
 	}
+
 	return pageSize, nil
 }
 
@@ -275,9 +307,18 @@ func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (e
 		height: C.float(height),
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.add_image_to_page(pdf, input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "add_image_to_page")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF add_image_to_page function: %s", C.GoString(output.error))
 	}
 
@@ -439,9 +480,18 @@ func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (
 		font_size:   C.float(params.Font.Size),
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.add_text_to_page(pdf, input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "add_text_to_page")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF add_text_to_page function: %s", C.GoString(output.error))
 	}
 
@@ -485,9 +535,18 @@ func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxPara
 		height: C.float(height),
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.add_checkbox_to_page(pdf, input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "add_checkbox_to_page")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF add_checkbox_to_page function: %s", C.GoString(output.error))
 	}
 
@@ -506,9 +565,18 @@ func (p *PdfHandler) SavePDF(document PdfDocument, filePath string) (err error) 
 		error:  nil,
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.save_pdf(pdf, cFilePath)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "save_pdf")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at the C/MuPDF save_pdf function: %s", C.GoString(output.error))
 	}
 
