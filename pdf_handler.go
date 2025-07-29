@@ -607,3 +607,11 @@ func (p *PdfHandler) SavePDF(document PdfDocument, filePath string) (err error) 
 
 	return nil
 }
+
+func (p *PdfHandler) SaveToPNG(document PdfDocument, page, width uint16, scale float32, dpi int, output io.Writer) (err error) {
+	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.SaveToPNG")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	// TODO: Implementation will be added in the next step
+	return errors.New("SaveToPNG method not yet implemented")
+}
