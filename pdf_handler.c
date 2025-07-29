@@ -625,3 +625,11 @@ savePDFOutput save_pdf(pdfDocument document, const char *file_path) {
     return output;
 }
 
+saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
+    saveToPNGOutput output;
+    output.payload = NULL;
+    output.payload_length = 0;
+    output.error = strdup("save_to_png_file not yet implemented");
+    return output;
+}
+

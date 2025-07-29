@@ -85,4 +85,20 @@ typedef struct {
 
 savePDFOutput save_pdf(pdfDocument document, const char *file_path);
 
+typedef struct {
+    int page;
+    int width;
+    float scale;
+    int dpi;
+    const char *file_path;
+} saveToPNGInput;
+
+typedef struct {
+    char *payload;
+    size_t payload_length;
+    char *error; // NULL if successful
+} saveToPNGOutput;
+
+saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input);
+
 #endif
