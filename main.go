@@ -124,7 +124,7 @@ func SaveToHTML(
 		return fmt.Errorf("failure at the C/MuPDF layer: %s", C.GoString(result.error))
 	}
 
-	if _, err := output.Write([]byte(C.GoStringN(result.payload, C.int(result.payload_length)))); err != nil {
+	if _, err := output.Write(C.GoBytes(unsafe.Pointer(result.payload), C.int(result.payload_length))); err != nil {
 		return fmt.Errorf("fail to write to the output: %w", err)
 	}
 	return nil
