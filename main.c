@@ -260,14 +260,14 @@ save_to_png_output save_to_png(save_to_png_input input) {
   fz_try(ctx) {
     stream = fz_open_memory(ctx, (const unsigned char *)input.payload, input.payload_length);
     doc = pdf_open_document_with_stream(ctx, stream);
-    page = pdf_load_page(ctx, doc, input.page);
-    dimension d = calculate_dimensions(ctx, page, input.width, input.scale, input.dpi);
+    page = pdf_load_page(ctx, doc, input.params.page);
+    dimension d = calculate_dimensions(ctx, page, input.params.width, input.params.scale, input.params.dpi);
     fz_irect bbox = fz_round_rect(d.bounds);
     pixmap = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, 1);
     fz_clear_pixmap_with_value(ctx, pixmap, 0xff);
     device = fz_new_draw_device(ctx, d.ctm, pixmap);
     fz_enable_device_hints(ctx, device, FZ_NO_CACHE);
-    pdf_run_page(ctx, page, device, fz_identity, input.cookie);
+    pdf_run_page(ctx, page, device, fz_identity, input.params.cookie);
     buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
     output.payload_length = fz_buffer_storage(ctx, buffer, NULL);
     output.payload = je_malloc(sizeof(char)*output.payload_length);
@@ -309,7 +309,7 @@ fz_stext_page *nitro_new_stext_page_from_page(fz_context *ctx, pdf_page *page, c
   if (page == NULL)
     return NULL;
 
-  dimension d = calculate_dimensions(ctx, page, input.width, input.scale, input.dpi);
+  dimension d = calculate_dimensions(ctx, page, input.params.width, input.params.scale, input.params.dpi);
   text = fz_new_stext_page(ctx, d.bounds);
   fz_try(ctx) {
     dev = fz_new_stext_device(ctx, text, options);
@@ -378,9 +378,9 @@ save_to_html_output save_to_html(save_to_html_input input) {
     stext_options.flags |= FZ_STEXT_PRESERVE_WHITESPACE;
     stext_options.flags |= FZ_STEXT_COLLECT_STRUCTURE;
     stext_options.flags |= FZ_STEXT_COLLECT_VECTORS;
-    text_page = nitro_new_stext_page_from_page_number(ctx, doc, input.page, &stext_options, input);
+    text_page = nitro_new_stext_page_from_page_number(ctx, doc, input.params.page, &stext_options, input);
 
-    fz_print_stext_page_as_html(ctx, out, text_page, input.page);
+    fz_print_stext_page_as_html(ctx, out, text_page, input.params.page);
     fz_write_string(ctx, out, "</body></html>");
     fz_close_output(ctx, out);
 

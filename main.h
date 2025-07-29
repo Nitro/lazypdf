@@ -18,9 +18,13 @@ typedef struct {
 	int width;
 	float scale;
 	int dpi;
+	fz_cookie *cookie;
+} save_to_png_params;
+
+typedef struct {
+	save_to_png_params params;
 	char *payload;
 	size_t payload_length;
-	fz_cookie *cookie;
 } save_to_png_input;
 
 typedef struct {
@@ -34,9 +38,13 @@ typedef struct {
 	int width;
 	float scale;
 	int dpi;
+	fz_cookie *cookie;
+} save_to_html_params;
+
+typedef struct {
+	save_to_html_params params;
 	char *payload;
 	size_t payload_length;
-	fz_cookie *cookie;
 } save_to_html_input;
 
 typedef struct {
