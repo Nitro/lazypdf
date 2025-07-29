@@ -620,12 +620,15 @@ func (p *PdfHandler) SaveToPNG(document PdfDocument, page, width uint16, scale f
 		handle: document.handle,
 		error:  nil,
 	}
-
 	input := C.saveToPNGInput{
 		page:  C.int(page),
 		width: C.int(width),
 		scale: C.float(scale),
 		dpi:   C.int(dpi),
+	}
+
+	if dpi < defaultDPI {
+		input.dpi = C.int(defaultDPI)
 	}
 
 	// Measure C function call performance
