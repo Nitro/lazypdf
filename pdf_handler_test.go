@@ -1246,24 +1246,34 @@ func TestPdfHandler_SaveToPNGOK(t *testing.T) {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	handler := NewPdfHandler(context.Background(), logger)
+	file, err := os.Open("testdata/sample.pdf")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	document, err := handler.OpenPDF(file)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	for i := uint16(0); i < 13; i++ {
 		t.Run(fmt.Sprintf("page_%d", i), func(t *testing.T) {
-			file, err := os.Open("testdata/sample.pdf")
-			require.NoError(t, err)
-			defer func() { require.NoError(t, file.Close()) }()
-
-			document, err := handler.OpenPDF(file)
-			require.NoError(t, err)
-			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			buf := bytes.NewBuffer([]byte{})
 			err = handler.SaveToPNG(document, i, 0, 0, 0, buf)
 			require.NoError(t, err)
 
-			expectedPage, err := os.ReadFile(fmt.Sprintf("testdata/sample_page%d.png", i))
+			// Save the buffer to a temporary PNG file
+			tmpFile, err := os.CreateTemp("tmp", fmt.Sprintf("test_page_%d_*.png", i))
 			require.NoError(t, err)
+			defer tmpFile.Close()
+
 			resultPage, err := io.ReadAll(buf)
+			require.NoError(t, err)
+			_, err = tmpFile.Write(resultPage)
+			require.NoError(t, err)
+
+			t.Logf("Saved PNG for page %d to: %s", i, tmpFile.Name())
+
+			expectedPage, err := os.ReadFile(fmt.Sprintf("testdata/sample_page%d.png", i))
 			require.NoError(t, err)
 			require.Equal(t, expectedPage, resultPage)
 		})
