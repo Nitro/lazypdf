@@ -655,7 +655,7 @@ func (p *PdfHandler) SaveToPNG(document PdfDocument, page, width uint16, scale f
 	}
 
 	if result.payload_length > 0 {
-		if _, err := output.Write([]byte(C.GoStringN(result.payload, C.int(result.payload_length)))); err != nil {
+		if _, err := output.Write(C.GoBytes(unsafe.Pointer(result.payload), C.int(result.payload_length))); err != nil {
 			return fmt.Errorf("fail to write to the output: %w", err)
 		}
 	}
