@@ -90,7 +90,6 @@ typedef struct {
     int width;
     float scale;
     int dpi;
-    const char *file_path;
 } saveToPNGInput;
 
 typedef struct {
