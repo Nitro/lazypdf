@@ -51,20 +51,22 @@ func SaveToPNG(
 	}
 
 	input := C.save_to_png_input{
-		page:           C.int(page),
-		width:          C.int(width),
-		scale:          C.float(scale),
-		dpi:            C.int(dpi),
+		params: C.save_to_png_params{
+			page:   C.int(page),
+			width:  C.int(width),
+			scale:  C.float(scale),
+			dpi:    C.int(dpi),
+			cookie: &C.fz_cookie{abort: 0},
+		},
 		payload:        (*C.char)(unsafe.Pointer(&payload[0])),
 		payload_length: C.size_t(len(payload)),
-		cookie:         &C.fz_cookie{abort: 0},
 	}
 	if dpi < defaultDPI {
-		input.dpi = C.int(defaultDPI)
+		input.params.dpi = C.int(defaultDPI)
 	}
 	go func() {
 		<-ctx.Done()
-		input.cookie.abort = 1
+		input.params.cookie.abort = 1
 	}()
 	result := C.save_to_png(input) // nolint: gocritic
 	defer C.je_free(unsafe.Pointer(result.payload))
@@ -98,20 +100,22 @@ func SaveToHTML(
 	}
 
 	input := C.save_to_html_input{
-		page:           C.int(page),
-		width:          C.int(width),
-		scale:          C.float(scale),
-		dpi:            C.int(dpi),
+		params: C.save_to_html_params{
+			page:   C.int(page),
+			width:  C.int(width),
+			scale:  C.float(scale),
+			dpi:    C.int(dpi),
+			cookie: &C.fz_cookie{abort: 0},
+		},
 		payload:        (*C.char)(unsafe.Pointer(&payload[0])),
 		payload_length: C.size_t(len(payload)),
-		cookie:         &C.fz_cookie{abort: 0},
 	}
 	if dpi < defaultDPI {
-		input.dpi = C.int(defaultDPI)
+		input.params.dpi = C.int(defaultDPI)
 	}
 	go func() {
 		<-ctx.Done()
-		input.cookie.abort = 1
+		input.params.cookie.abort = 1
 	}()
 	result := C.save_to_html(input) // nolint: gocritic
 	defer C.je_free(unsafe.Pointer(result.payload))
@@ -120,7 +124,7 @@ func SaveToHTML(
 		return fmt.Errorf("failure at the C/MuPDF layer: %s", C.GoString(result.error))
 	}
 
-	if _, err := output.Write([]byte(C.GoStringN(result.payload, C.int(result.payload_length)))); err != nil {
+	if _, err := output.Write(C.GoBytes(unsafe.Pointer(result.payload), C.int(result.payload_length))); err != nil {
 		return fmt.Errorf("fail to write to the output: %w", err)
 	}
 	return nil

@@ -607,3 +607,58 @@ func (p *PdfHandler) SavePDF(document PdfDocument, filePath string) (err error) 
 
 	return nil
 }
+
+func (p *PdfHandler) SaveToPNG(document PdfDocument, page, width uint16, scale float32, dpi int, output io.Writer) (err error) {
+	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.SaveToPNG")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	if output == nil {
+		return errors.New("output can't be nil")
+	}
+
+	pdf := C.pdfDocument{
+		handle: document.handle,
+		error:  nil,
+	}
+	input := C.saveToPNGInput{
+		page:   C.int(page),
+		width:  C.int(width),
+		scale:  C.float(scale),
+		dpi:    C.int(dpi),
+		cookie: &C.fz_cookie{abort: 0},
+	}
+
+	if dpi < defaultDPI {
+		input.dpi = C.int(defaultDPI)
+	}
+
+	// Set up context cancellation handling
+	go func() {
+		<-p.ctx.Done()
+		input.cookie.abort = 1
+	}()
+
+	// Measure C function call performance
+	cCallStart := time.Now()
+	result := C.save_to_png_file(pdf, input)
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "save_to_png_file")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
+	defer C.je_free(unsafe.Pointer(result.payload))
+	if result.error != nil {
+		defer C.je_free(unsafe.Pointer(result.error))
+		span.SetTag("c_function_error", true)
+		return fmt.Errorf("failure at the C/MuPDF save_to_png_file function: %s", C.GoString(result.error))
+	}
+
+	if result.payload_length > 0 {
+		if _, err := output.Write(C.GoBytes(unsafe.Pointer(result.payload), C.int(result.payload_length))); err != nil {
+			return fmt.Errorf("fail to write to the output: %w", err)
+		}
+	}
+
+	return nil
+}

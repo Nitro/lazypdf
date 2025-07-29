@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include "mupdf/fitz.h"
+#include "mupdf/pdf.h"
 
 
 typedef struct {
@@ -84,5 +86,21 @@ typedef struct {
 } savePDFOutput;
 
 savePDFOutput save_pdf(pdfDocument document, const char *file_path);
+
+typedef struct {
+    int page;
+    int width;
+    float scale;
+    int dpi;
+	fz_cookie *cookie;
+} saveToPNGInput;
+
+typedef struct {
+    char *payload;
+    size_t payload_length;
+    char *error; // NULL if successful
+} saveToPNGOutput;
+
+saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input);
 
 #endif

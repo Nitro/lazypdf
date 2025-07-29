@@ -5,6 +5,7 @@
 #include <mupdf/pdf.h>
 
 #include "pdf_handler.h"
+#include "main.h"
 
 extern fz_context *global_ctx;
 
@@ -621,6 +622,45 @@ savePDFOutput save_pdf(pdfDocument document, const char *file_path) {
         output.error = strdup(fz_caught_message(ctx));
     }
 
+    fz_drop_context(ctx);
+    return output;
+}
+
+saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
+    saveToPNGOutput output;
+    output.payload = NULL;
+    output.payload_length = 0;
+    output.error = NULL;
+
+    fz_context *ctx = fz_clone_context(global_ctx);
+    if (ctx == NULL) {
+        output.error = strdup("fail to clone a context");
+        return output;
+    }
+
+    fz_try(ctx) {
+        pdf_document *doc = (pdf_document *)document.handle;
+        
+        // Convert saveToPNGInput to save_to_png_params
+        save_to_png_params params;
+        params.page = input.page;
+        params.width = input.width;
+        params.scale = input.scale;
+        params.dpi = input.dpi;
+        params.cookie = input.cookie;
+        
+        // Call the main.c function
+        save_to_png_output main_output = save_to_png_with_document(ctx, doc, params);
+        
+        // Convert save_to_png_output to saveToPNGOutput
+        output.payload = main_output.payload;
+        output.payload_length = main_output.payload_length;
+        output.error = main_output.error;
+        
+    } fz_catch(ctx) {
+        output.error = strdup(fz_caught_message(ctx));
+    }
+    
     fz_drop_context(ctx);
     return output;
 }
