@@ -231,6 +231,50 @@ dimension calculate_dimensions(fz_context *ctx, pdf_page *page, int width, float
   return d;
 }
 
+save_to_png_output save_to_png_with_document(fz_context *ctx, pdf_document *doc, save_to_png_params params) {
+  save_to_png_output output;
+  output.payload = NULL;
+  output.payload_length = 0;
+  output.error = NULL;
+
+  pdf_page *page = NULL;
+  fz_device *device = NULL;
+  fz_pixmap *pixmap = NULL;
+  fz_buffer *buffer = NULL;
+
+  fz_var(page);
+  fz_var(device);
+  fz_var(pixmap);
+  fz_var(buffer);
+
+  fz_try(ctx) {
+    page = pdf_load_page(ctx, doc, params.page);
+    dimension d = calculate_dimensions(ctx, page, params.width, params.scale, params.dpi);
+    fz_irect bbox = fz_round_rect(d.bounds);
+    pixmap = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, 1);
+    fz_clear_pixmap_with_value(ctx, pixmap, 0xff);
+    device = fz_new_draw_device(ctx, d.ctm, pixmap);
+    fz_enable_device_hints(ctx, device, FZ_NO_CACHE);
+    pdf_run_page(ctx, page, device, fz_identity, params.cookie);
+    buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
+    output.payload_length = fz_buffer_storage(ctx, buffer, NULL);
+    output.payload = je_malloc(sizeof(char)*output.payload_length);
+    memcpy(output.payload, fz_string_from_buffer(ctx, buffer), output.payload_length);
+  } fz_always(ctx) {
+    fz_drop_buffer(ctx, buffer);
+    fz_try(ctx) {
+      fz_close_device(ctx, device);
+    } fz_catch(ctx) {}
+    fz_drop_device(ctx, device);
+    fz_drop_pixmap(ctx, pixmap);
+    fz_drop_page(ctx, (fz_page*)page);
+  } fz_catch(ctx) {
+    output.error = strdup(fz_caught_message(ctx));
+  }
+
+  return output;
+}
+
 save_to_png_output save_to_png(save_to_png_input input) {
   save_to_png_output output;
   output.payload = NULL;
@@ -245,41 +289,15 @@ save_to_png_output save_to_png(save_to_png_input input) {
 
   fz_stream *stream = NULL;
   pdf_document *doc = NULL;
-  pdf_page *page = NULL;
-  fz_device *device = NULL;
-  fz_pixmap *pixmap = NULL;
-  fz_buffer *buffer = NULL;
 
   fz_var(stream);
   fz_var(doc);
-  fz_var(page);
-  fz_var(device);
-  fz_var(pixmap);
-  fz_var(buffer);
 
   fz_try(ctx) {
     stream = fz_open_memory(ctx, (const unsigned char *)input.payload, input.payload_length);
     doc = pdf_open_document_with_stream(ctx, stream);
-    page = pdf_load_page(ctx, doc, input.params.page);
-    dimension d = calculate_dimensions(ctx, page, input.params.width, input.params.scale, input.params.dpi);
-    fz_irect bbox = fz_round_rect(d.bounds);
-    pixmap = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, 1);
-    fz_clear_pixmap_with_value(ctx, pixmap, 0xff);
-    device = fz_new_draw_device(ctx, d.ctm, pixmap);
-    fz_enable_device_hints(ctx, device, FZ_NO_CACHE);
-    pdf_run_page(ctx, page, device, fz_identity, input.params.cookie);
-    buffer = fz_new_buffer_from_pixmap_as_png(ctx, pixmap, fz_default_color_params);
-    output.payload_length = fz_buffer_storage(ctx, buffer, NULL);
-    output.payload = je_malloc(sizeof(char)*output.payload_length);
-    memcpy(output.payload, fz_string_from_buffer(ctx, buffer), output.payload_length);
+    output = save_to_png_with_document(ctx, doc, input.params);
   } fz_always(ctx) {
-    fz_drop_buffer(ctx, buffer);
-    fz_try(ctx) {
-      fz_close_device(ctx, device);
-    } fz_catch(ctx) {}
-    fz_drop_device(ctx, device);
-    fz_drop_pixmap(ctx, pixmap);
-    fz_drop_page(ctx, (fz_page*)page);
     pdf_drop_document(ctx, doc);
     fz_drop_stream(ctx, stream);
   } fz_catch(ctx) {
@@ -300,7 +318,7 @@ char *strdup(const char *s1) {
   return str;
 }
 
-fz_stext_page *nitro_new_stext_page_from_page(fz_context *ctx, pdf_page *page, const fz_stext_options *options, save_to_html_input input) {
+fz_stext_page *nitro_new_stext_page_from_page(fz_context *ctx, pdf_page *page, const fz_stext_options *options, save_to_html_params params) {
   fz_stext_page *text;
   fz_device *dev = NULL;
 
@@ -309,7 +327,7 @@ fz_stext_page *nitro_new_stext_page_from_page(fz_context *ctx, pdf_page *page, c
   if (page == NULL)
     return NULL;
 
-  dimension d = calculate_dimensions(ctx, page, input.params.width, input.params.scale, input.params.dpi);
+  dimension d = calculate_dimensions(ctx, page, params.width, params.scale, params.dpi);
   text = fz_new_stext_page(ctx, d.bounds);
   fz_try(ctx) {
     dev = fz_new_stext_device(ctx, text, options);
@@ -325,13 +343,13 @@ fz_stext_page *nitro_new_stext_page_from_page(fz_context *ctx, pdf_page *page, c
   return text;
 }
 
-fz_stext_page *nitro_new_stext_page_from_page_number(fz_context *ctx, pdf_document *doc, int number, const fz_stext_options *options, save_to_html_input input) {
+fz_stext_page *nitro_new_stext_page_from_page_number(fz_context *ctx, pdf_document *doc, int number, const fz_stext_options *options, save_to_html_params params) {
   pdf_page *page;
   fz_stext_page *text = NULL;
 
   page = pdf_load_page(ctx, doc, number);
   fz_try(ctx)
-    text = nitro_new_stext_page_from_page(ctx, page, options, input);
+    text = nitro_new_stext_page_from_page(ctx, page, options, params);
   fz_always(ctx)
     pdf_drop_page(ctx, page);
   fz_catch(ctx)
@@ -378,7 +396,7 @@ save_to_html_output save_to_html(save_to_html_input input) {
     stext_options.flags |= FZ_STEXT_PRESERVE_WHITESPACE;
     stext_options.flags |= FZ_STEXT_COLLECT_STRUCTURE;
     stext_options.flags |= FZ_STEXT_COLLECT_VECTORS;
-    text_page = nitro_new_stext_page_from_page_number(ctx, doc, input.params.page, &stext_options, input);
+    text_page = nitro_new_stext_page_from_page_number(ctx, doc, input.params.page, &stext_options, input.params);
 
     fz_print_stext_page_as_html(ctx, out, text_page, input.params.page);
     fz_write_string(ctx, out, "</body></html>");
