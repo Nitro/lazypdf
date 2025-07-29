@@ -621,15 +621,22 @@ func (p *PdfHandler) SaveToPNG(document PdfDocument, page, width uint16, scale f
 		error:  nil,
 	}
 	input := C.saveToPNGInput{
-		page:  C.int(page),
-		width: C.int(width),
-		scale: C.float(scale),
-		dpi:   C.int(dpi),
+		page:   C.int(page),
+		width:  C.int(width),
+		scale:  C.float(scale),
+		dpi:    C.int(dpi),
+		cookie: &C.fz_cookie{abort: 0},
 	}
 
 	if dpi < defaultDPI {
 		input.dpi = C.int(defaultDPI)
 	}
+
+	// Set up context cancellation handling
+	go func() {
+		<-p.ctx.Done()
+		input.cookie.abort = 1
+	}()
 
 	// Measure C function call performance
 	cCallStart := time.Now()

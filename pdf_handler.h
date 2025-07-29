@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include "mupdf/fitz.h"
+#include "mupdf/pdf.h"
 
 
 typedef struct {
@@ -90,6 +92,7 @@ typedef struct {
     int width;
     float scale;
     int dpi;
+	fz_cookie *cookie;
 } saveToPNGInput;
 
 typedef struct {

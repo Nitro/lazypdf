@@ -647,7 +647,7 @@ saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
         params.width = input.width;
         params.scale = input.scale;
         params.dpi = input.dpi;
-        params.cookie = &(fz_cookie){abort: 0}; // Default cookie
+        params.cookie = input.cookie;
         
         // Call the main.c function
         save_to_png_output main_output = save_to_png_with_document(ctx, doc, params);
