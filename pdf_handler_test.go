@@ -1244,18 +1244,18 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 func TestPdfHandler_SaveToPNGOK(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	handler := NewPdfHandler(context.Background(), logger)
-	file, err := os.Open("testdata/sample.pdf")
-	require.NoError(t, err)
-	defer func() { require.NoError(t, file.Close()) }()
-
-	document, err := handler.OpenPDF(file)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
-
 	for i := uint16(0); i < 13; i++ {
 		t.Run(fmt.Sprintf("page_%d", i), func(t *testing.T) {
+
+			logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+			handler := NewPdfHandler(context.Background(), logger)
+			file, err := os.Open("testdata/sample.pdf")
+			require.NoError(t, err)
+			defer func() { require.NoError(t, file.Close()) }()
+
+			document, err := handler.OpenPDF(file)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			buf := bytes.NewBuffer([]byte{})
 			err = handler.SaveToPNG(document, i, 0, 0, 0, buf)
