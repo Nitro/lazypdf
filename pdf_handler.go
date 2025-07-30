@@ -214,6 +214,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document *PdfDocument, err e
 		wrappedPages: make(map[int]bool),
 	}
 	document = &pdf
+	return
 }
 
 func (p *PdfHandler) ClosePDF(document *PdfDocument) (err error) {
