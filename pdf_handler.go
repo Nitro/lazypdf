@@ -50,8 +50,10 @@ func NewPdfHandlerWithLogger(logger *slog.Logger) *PdfHandler {
 }
 
 type PdfDocument struct {
-	handle C.uintptr_t
-	file   string
+	handle       C.uintptr_t
+	file         string
+	wrappedPages map[int]bool 
+	mu           sync.RWMutex 
 }
 
 type Location struct {
@@ -208,8 +210,9 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err er
 	}
 
 	pdf := PdfDocument{
-		handle: output.handle,
-		file:   filename,
+		handle:       output.handle,
+		file:         filename,
+		wrappedPages: make(map[int]bool),
 	}
 	return pdf, nil
 }
@@ -285,6 +288,40 @@ func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDoc
 	}
 
 	return pageSize, nil
+}
+
+
+func (p *PdfHandler) wrapPageContents(document *PdfDocument, pageNum int) error {
+	
+	document.mu.RLock()
+	if document.wrappedPages[pageNum] {
+		document.mu.RUnlock()
+		return nil // Already wrapped, no need to call C function
+	}
+	document.mu.RUnlock()
+
+	document.mu.Lock()
+	defer document.mu.Unlock()
+
+	// Double-check in case another goroutine wrapped it while we were waiting for the lock
+	if document.wrappedPages[pageNum] {
+		return nil
+	}
+
+	pdf := C.pdfDocument{
+		handle: document.handle,
+		error:  nil,
+	}
+
+	output := C.wrap_page_contents_for_page(pdf, C.int(pageNum))
+	if output.error != nil {
+		defer C.je_free(unsafe.Pointer(output.error))
+		return fmt.Errorf("failure at wrap_page_contents_for_page: %s", C.GoString(output.error))
+	}
+
+	document.wrappedPages[pageNum] = true
+
+	return nil
 }
 
 func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (err error) {

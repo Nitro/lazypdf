@@ -665,3 +665,31 @@ saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
     return output;
 }
 
+wrapPageOutput wrap_page_contents_for_page(pdfDocument document, int page_number) {
+    wrapPageOutput output = { .error = NULL };
+    pdf_document *pdf = NULL;
+    pdf_page *page = NULL;
+    
+    fz_context *ctx = fz_clone_context(global_ctx);
+    if (!ctx) {
+        output.error = strdup("Context clone failed");
+        return output;
+    }
+
+    fz_var(pdf);
+    fz_try(ctx) {
+        pdf = (pdf_document *)document.handle;
+        page = pdf_load_page(ctx, pdf, page_number);
+        wrap_page_contents(ctx, page);
+    }
+    fz_always(ctx) {
+        fz_drop_page(ctx, &page->super);
+    }
+    fz_catch(ctx) {
+        output.error = strdup(fz_caught_message(ctx));
+    }
+
+    fz_drop_context(ctx);
+    return output;
+}
+
