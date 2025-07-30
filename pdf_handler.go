@@ -194,12 +194,10 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err er
 		filename: cFilename,
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.open_pdf(input)
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "open_pdf")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -226,12 +224,10 @@ func (p *PdfHandler) ClosePDF(document PdfDocument) (err error) {
 		error:  nil,
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.close_pdf(pdf)
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "close_pdf")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -268,12 +264,10 @@ func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDoc
 		error:  nil,
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.get_page_size(pdf, C.int(page))
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "get_page_size")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -290,6 +284,11 @@ func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDoc
 	return pageSize, nil
 }
 
+// wrapPageContents ensures the given page is wrapped only once to prepare it for annotation.
+//
+// Wrapping involves analyzing and rebalancing the page's graphic state, which is expensive.
+// To avoid redundant work, we cache the result and skip wrapping on subsequent calls.
+// This significantly improves performance when adding multiple annotations to the same page.
 func (p *PdfHandler) wrapPageContents(ctx context.Context, document *PdfDocument, pageNum int) (err error) {
 	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.wrapPageContents")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
@@ -307,12 +306,10 @@ func (p *PdfHandler) wrapPageContents(ctx context.Context, document *PdfDocument
 		error:  nil,
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.wrap_page_contents_for_page(pdf, C.int(pageNum))
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "wrap_page_contents_for_page")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -361,18 +358,15 @@ func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (e
 		height: C.float(height),
 	}
 
-	// Wrap page contents before adding image
 	err = p.wrapPageContents(ctx, &document, params.Page)
 	if err != nil {
 		return fmt.Errorf("failure at the AddImageToPage function:: %s", err)
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.add_image_to_page(pdf, input)
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "add_image_to_page")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -550,18 +544,15 @@ func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (
 		font_size:   C.float(params.Font.Size),
 	}
 
-	// Wrap page contents before adding text
 	err = p.wrapPageContents(ctx, &document, params.Page)
 	if err != nil {
 		return fmt.Errorf("failure at the AddTextBoxToPage function: %s", err)
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.add_text_to_page(pdf, input)
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "add_text_to_page")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -612,18 +603,15 @@ func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxPara
 		height: C.float(height),
 	}
 
-	// Wrap page contents before adding checkbox
 	err = p.wrapPageContents(ctx, &document, params.Page)
 	if err != nil {
 		return fmt.Errorf("failure at the AddCheckboxToPage function: %s", err)
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.add_checkbox_to_page(pdf, input)
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "add_checkbox_to_page")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -648,12 +636,10 @@ func (p *PdfHandler) SavePDF(document PdfDocument, filePath string) (err error) 
 		error:  nil,
 	}
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	output := C.save_pdf(pdf, cFilePath)
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "save_pdf")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
@@ -690,18 +676,15 @@ func (p *PdfHandler) SaveToPNG(document PdfDocument, page, width uint16, scale f
 		input.dpi = C.int(defaultDPI)
 	}
 
-	// Set up context cancellation handling
 	go func() {
 		<-p.ctx.Done()
 		input.cookie.abort = 1
 	}()
 
-	// Measure C function call performance
 	cCallStart := time.Now()
 	result := C.save_to_png_file(pdf, input)
 	cCallDuration := time.Since(cCallStart)
 
-	// Add performance metrics to trace
 	span.SetTag("c_function", "save_to_png_file")
 	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
 
