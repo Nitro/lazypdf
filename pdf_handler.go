@@ -290,7 +290,10 @@ func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDoc
 	return pageSize, nil
 }
 
-func (p *PdfHandler) wrapPageContents(document *PdfDocument, pageNum int) error {
+func (p *PdfHandler) wrapPageContents(ctx context.Context, document *PdfDocument, pageNum int) (err error) {
+	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.wrapPageContents")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
 	// Lock the entire function
 	document.mu.Lock()
 	defer document.mu.Unlock()
@@ -318,6 +321,12 @@ func (p *PdfHandler) wrapPageContents(document *PdfDocument, pageNum int) error 
 func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (err error) {
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddImageToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	// Wrap page contents before adding image
+	err = p.wrapPageContents(ctx, &document, params.Page)
+	if err != nil {
+		return fmt.Errorf("failure at wrapPageContents in AddImageToPage: %s", err)
+	}
 
 	cImagePath := C.CString(params.ImagePath)
 	defer C.free(unsafe.Pointer(cImagePath))
@@ -486,6 +495,12 @@ func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddTextBoxToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
+	// Wrap page contents before adding text
+	err = p.wrapPageContents(ctx, &document, params.Page)
+	if err != nil {
+		return fmt.Errorf("failure at wrapPageContents in AddTextBoxToPage: %s", err)
+	}
+
 	fontPath, descender, err := p.getFontAttributes(ctx, params.Font.Family, params.Font.Size)
 	if err != nil {
 		return fmt.Errorf("failure at PdfHandler AddTextBoxToPage function: failed to find font path for %q", params.Font.Family)
@@ -560,6 +575,12 @@ func boolToInt(value bool) int {
 func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParams) (err error) {
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddCheckboxToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	// Wrap page contents before adding checkbox
+	err = p.wrapPageContents(ctx, &document, params.Page)
+	if err != nil {
+		return fmt.Errorf("failure at wrapPageContents in AddCheckboxToPage: %s", err)
+	}
 
 	pdf := C.pdfDocument{
 		handle: document.handle,
