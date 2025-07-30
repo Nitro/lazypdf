@@ -1420,7 +1420,6 @@ func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	handler := NewPdfHandler(context.Background(), logger)
 
-	// Open document once for the benchmark
 	file, err := os.Open("testdata/sample.pdf")
 	require.NoError(b, err)
 	defer func() { require.NoError(b, file.Close()) }()
@@ -1447,8 +1446,7 @@ func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
 	err = handler.AddTextBoxToPage(document, firstTextParams)
 	require.NoError(b, err)
 
-	// Verify page is wrapped after first annotation
-	//require.True(b, document.wrappedPages[0], "Page should be wrapped after first annotation")
+	require.True(b, document.wrappedPages[0], "Page should be wrapped after first annotation")
 
 	// Reset timer to exclude setup time
 	b.ResetTimer()
@@ -1459,8 +1457,8 @@ func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		textParams := TextParams{
 			Value:    fmt.Sprintf("Benchmark annotation %d", i),
-			Page:     0,                                             // Same page, so wrapPageContents should return early
-			Location: Location{X: 0.1, Y: 0.2 + float64(i%10)*0.05}, // Vary position slightly
+			Page:     0,
+			Location: Location{X: 0.1, Y: 0.2 + float64(i%10)*0.05},
 			Size:     Size{Width: 0.3, Height: 0.04},
 			Font: struct {
 				Family string
