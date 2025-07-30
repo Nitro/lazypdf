@@ -29,7 +29,7 @@ import (
 
 const defaultDPI = 72
 
-func init() {
+func init() { // nolint:gochecknoinits
 	C.init()
 }
 
