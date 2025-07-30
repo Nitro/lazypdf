@@ -2,8 +2,10 @@ linters:
   disable-all: true
   enable:
     - bodyclose
+    - dupl
     - errcheck
     - gochecknoglobals
+    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
@@ -12,6 +14,7 @@ linters:
     - gosec
     - gosimple
     - govet
+    - lll
     - ineffassign
     - misspell
     - nakedret
@@ -25,11 +28,6 @@ linters:
     - dogsled
     - godox
     - whitespace
-
-issues:
-  exclude-files:
-    - pdf_handler.go
-    - pdf_handler_test.go
 
 linter-settings:
   goimports:
