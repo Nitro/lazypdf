@@ -178,13 +178,13 @@ func (p *PdfHandler) LocationSizeToPdfPoints(ctx context.Context, document *PdfD
 		nil
 }
 
-func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err error) {
+func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document *PdfDocument, err error) {
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.OpenPDF")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
 	filename, err := savePayloadToTempFile(ctx, rawPayload)
 	if err != nil {
-		return PdfDocument{}, err
+		return nil, err
 	}
 
 	cFilename := C.CString(filename)
@@ -204,7 +204,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err er
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
 		span.SetTag("c_function_error", true)
-		return PdfDocument{}, fmt.Errorf("failure at the C/MuPDF open_pdf function: %s", C.GoString(output.error))
+		return nil, fmt.Errorf("failure at the C/MuPDF open_pdf function: %s", C.GoString(output.error))
 	}
 
 	pdf := PdfDocument{
@@ -212,7 +212,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err er
 		file:         filename,
 		wrappedPages: make(map[int]bool),
 	}
-	return pdf, nil
+	return &pdf, nil
 }
 
 func (p *PdfHandler) ClosePDF(document *PdfDocument) (err error) {
@@ -652,7 +652,7 @@ func (p *PdfHandler) SavePDF(document *PdfDocument, filePath string) (err error)
 	return nil
 }
 
-func (p *PdfHandler) SaveToPNG(document PdfDocument, page, width uint16, scale float32, dpi int, output io.Writer) (err error) {
+func (p *PdfHandler) SaveToPNG(document *PdfDocument, page, width uint16, scale float32, dpi int, output io.Writer) (err error) {
 	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.SaveToPNG")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
