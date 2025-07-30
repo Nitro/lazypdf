@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,10 +13,11 @@ import (
 
 // normalizeLineEndings converts all line endings to \n
 func normalizeLineEndings(data []byte) []byte {
-	s := string(data)
-	s = strings.ReplaceAll(s, "\r\n", "\n") // Windows to Unix
-	s = strings.ReplaceAll(s, "\r", "\n")   // Old Mac to Unix
-	return []byte(s)
+	// Replace Windows line endings (\r\n) with Unix (\n)
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	// Replace old Mac line endings (\r) with Unix (\n)
+	data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
+	return data
 }
 
 func TestSaveToHTMLOK(t *testing.T) {

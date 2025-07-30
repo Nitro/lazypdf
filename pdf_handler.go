@@ -184,7 +184,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document *PdfDocument, err e
 
 	filename, err := savePayloadToTempFile(ctx, rawPayload)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	cFilename := C.CString(filename)
@@ -205,7 +205,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document *PdfDocument, err e
 		defer C.je_free(unsafe.Pointer(output.error))
 		span.SetTag("c_function_error", true)
 		err = fmt.Errorf("failure at the C/MuPDF open_pdf function: %s", C.GoString(output.error))
-		return
+		return nil, err
 	}
 
 	pdf := PdfDocument{
@@ -214,7 +214,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document *PdfDocument, err e
 		wrappedPages: make(map[int]bool),
 	}
 	document = &pdf
-	return
+	return document, nil
 }
 
 func (p *PdfHandler) ClosePDF(document *PdfDocument) (err error) {
