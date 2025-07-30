@@ -52,8 +52,8 @@ func NewPdfHandlerWithLogger(logger *slog.Logger) *PdfHandler {
 type PdfDocument struct {
 	handle       C.uintptr_t
 	file         string
-	wrappedPages map[int]bool 
-	mu           sync.RWMutex 
+	wrappedPages map[int]bool
+	mu           sync.RWMutex
 }
 
 type Location struct {
@@ -290,22 +290,13 @@ func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDoc
 	return pageSize, nil
 }
 
-
 func (p *PdfHandler) wrapPageContents(document *PdfDocument, pageNum int) error {
-	
-	document.mu.RLock()
-	if document.wrappedPages[pageNum] {
-		document.mu.RUnlock()
-		return nil // Already wrapped, no need to call C function
-	}
-	document.mu.RUnlock()
-
+	// Lock the entire function
 	document.mu.Lock()
 	defer document.mu.Unlock()
 
-	// Double-check in case another goroutine wrapped it while we were waiting for the lock
 	if document.wrappedPages[pageNum] {
-		return nil
+		return nil // Already wrapped, no need to call C function
 	}
 
 	pdf := C.pdfDocument{
