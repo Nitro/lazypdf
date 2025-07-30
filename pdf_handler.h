@@ -103,4 +103,10 @@ typedef struct {
 
 saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input);
 
+typedef struct {
+    char *error; // NULL if successful
+} wrapPageOutput;
+
+wrapPageOutput wrap_page_contents_for_page(pdfDocument document, int page);
+
 #endif

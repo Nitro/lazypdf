@@ -1305,3 +1305,170 @@ func benchmarkPdfHandlerSaveToPNGRunner(page uint16, b *testing.B) {
 		require.NoError(b, err)
 	}
 }
+
+func TestPdfHandler_WrapPageContents(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	handler := NewPdfHandler(context.Background(), logger)
+
+	file, err := os.Open("testdata/pdf_handler_sample.pdf")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	document, err := handler.OpenPDF(file)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
+
+	// Initially, no pages should be wrapped
+	require.False(t, document.wrappedPages[0])
+
+	// First call to wrapPageContents for page 0 should mark it as wrapped
+	err = handler.wrapPageContents(context.Background(), &document, 0)
+	require.NoError(t, err)
+	require.True(t, document.wrappedPages[0])
+
+	// Second call to wrapPageContents for page 0 should not error and page should still be marked as wrapped
+	err = handler.wrapPageContents(context.Background(), &document, 0)
+	require.NoError(t, err)
+	require.True(t, document.wrappedPages[0])
+
+	// Test that other pages are not affected
+	require.False(t, document.wrappedPages[1])
+	require.False(t, document.wrappedPages[2])
+}
+
+func TestPdfHandler_WrapPageContents_InvalidPage(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	handler := NewPdfHandler(context.Background(), logger)
+
+	file, err := os.Open("testdata/pdf_handler_sample.pdf")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	document, err := handler.OpenPDF(file)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
+
+	// Call wrapPageContents with invalid page number should return error
+	err = handler.wrapPageContents(context.Background(), &document, 2)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failure at wrap_page_contents_for_page")
+}
+
+func TestPdfHandler_WrapPageContents_Integration(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	handler := NewPdfHandler(context.Background(), logger)
+
+	file, err := os.Open("testdata/sample.pdf")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	document, err := handler.OpenPDF(file)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
+
+	// Test that annotation functions automatically wrap page contents
+	require.False(t, document.wrappedPages[0])
+	textParams := TextParams{
+		Value:    "Test Text",
+		Page:     0,
+		Location: Location{X: 0.1, Y: 0.1},
+		Size:     Size{Width: 0.3, Height: 0.05},
+		Font: struct {
+			Family string
+			Size   float64
+		}{
+			Family: "Times New Roman",
+			Size:   12,
+		},
+	}
+	err = handler.AddTextBoxToPage(document, textParams)
+	require.NoError(t, err)
+	require.True(t, document.wrappedPages[0])
+
+	// Test that annotation functions automatically wrap page contents
+	require.False(t, document.wrappedPages[1])
+	imageParams := ImageParams{
+		Page:      1,
+		Location:  Location{X: 0.5, Y: 0.5},
+		Size:      Size{Width: 0.2, Height: 0.2},
+		ImagePath: "testdata/test_signature.png",
+	}
+	err = handler.AddImageToPage(document, imageParams)
+	require.NoError(t, err)
+	require.True(t, document.wrappedPages[1]) // Should still be true
+
+	// Test that annotation functions automatically wrap page contents
+	require.False(t, document.wrappedPages[2])
+	checkboxParams := CheckboxParams{
+		Value:    true,
+		Page:     2,
+		Location: Location{X: 0.7, Y: 0.7},
+		Size:     Size{Width: 0.05, Height: 0.05},
+	}
+	err = handler.AddCheckboxToPage(document, checkboxParams)
+	require.NoError(t, err)
+	require.True(t, document.wrappedPages[2])
+}
+
+func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	handler := NewPdfHandler(context.Background(), logger)
+
+	file, err := os.Open("testdata/sample.pdf")
+	require.NoError(b, err)
+	defer func() { require.NoError(b, file.Close()) }()
+
+	document, err := handler.OpenPDF(file)
+	require.NoError(b, err)
+	defer func() { require.NoError(b, handler.ClosePDF(document)) }()
+
+	// Add first annotation to trigger initial wrap_page_contents call
+	// This is outside the benchmark timing
+	firstTextParams := TextParams{
+		Value:    "First annotation - setup",
+		Page:     0,
+		Location: Location{X: 0.1, Y: 0.1},
+		Size:     Size{Width: 0.3, Height: 0.05},
+		Font: struct {
+			Family string
+			Size   float64
+		}{
+			Family: "Times New Roman",
+			Size:   12,
+		},
+	}
+	err = handler.AddTextBoxToPage(document, firstTextParams)
+	require.NoError(b, err)
+
+	require.True(b, document.wrappedPages[0], "Page should be wrapped after first annotation")
+
+	// Reset timer to exclude setup time
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	// Benchmark loop - all subsequent annotations should be faster
+	// since wrapPageContents will return early (already wrapped)
+	for i := 0; i < b.N; i++ {
+		textParams := TextParams{
+			Value:    fmt.Sprintf("Benchmark annotation %d", i),
+			Page:     0,
+			Location: Location{X: 0.1, Y: 0.2 + float64(i%10)*0.05},
+			Size:     Size{Width: 0.3, Height: 0.04},
+			Font: struct {
+				Family string
+				Size   float64
+			}{
+				Family: "Times New Roman",
+				Size:   10,
+			},
+		}
+		err = handler.AddTextBoxToPage(document, textParams)
+		require.NoError(b, err)
+	}
+}

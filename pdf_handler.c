@@ -336,7 +336,6 @@ addImageOutput add_image_to_page(pdfDocument document, addImageInput input) {
             fz_throw(ctx, FZ_ERROR_GENERIC, "Failed to load image from %s", input.path);
         }
 
-        wrap_page_contents(ctx, page);
         page_add_image(ctx, page, image, position);
     }
     fz_always(ctx) {
@@ -459,7 +458,6 @@ addTextOutput add_text_to_page(pdfDocument document, addTextInput input) {
         }
         fz_point position = {input.x, input.y};
 
-        wrap_page_contents(ctx, page);
         page_add_text(ctx, page, input.text, position,font, input.font_size, "Latin");
     }
     fz_always(ctx) {
@@ -579,7 +577,6 @@ addCheckboxOutput add_checkbox_to_page(pdfDocument document, addCheckboxInput in
         pdf = (pdf_document *)document.handle;
         page = pdf_load_page(ctx, pdf, input.page);
 
-        wrap_page_contents(ctx, page);
         page_add_checkbox(ctx, page, position, input.value);
 
     }
@@ -661,6 +658,34 @@ saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
         output.error = strdup(fz_caught_message(ctx));
     }
     
+    fz_drop_context(ctx);
+    return output;
+}
+
+wrapPageOutput wrap_page_contents_for_page(pdfDocument document, int page_number) {
+    wrapPageOutput output = { .error = NULL };
+    pdf_document *pdf = NULL;
+    pdf_page *page = NULL;
+    
+    fz_context *ctx = fz_clone_context(global_ctx);
+    if (!ctx) {
+        output.error = strdup("Context clone failed");
+        return output;
+    }
+
+    fz_var(pdf);
+    fz_try(ctx) {
+        pdf = (pdf_document *)document.handle;
+        page = pdf_load_page(ctx, pdf, page_number);
+        wrap_page_contents(ctx, page);
+    }
+    fz_always(ctx) {
+        fz_drop_page(ctx, &page->super);
+    }
+    fz_catch(ctx) {
+        output.error = strdup(fz_caught_message(ctx));
+    }
+
     fz_drop_context(ctx);
     return output;
 }
