@@ -160,7 +160,7 @@ func savePayloadToTempFile(ctx context.Context, r io.Reader) (filename string, e
 }
 
 // Percentages relative to page dimensions to PDF Point
-func (p *PdfHandler) LocationSizeToPdfPoints(ctx context.Context, document PdfDocument, page int, x, y, width, height float64) (float64, float64, float64, float64, error) {
+func (p *PdfHandler) LocationSizeToPdfPoints(ctx context.Context, document *PdfDocument, page int, x, y, width, height float64) (float64, float64, float64, float64, error) {
 	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.LocationSizeToPdfPoints")
 	defer span.Finish()
 
@@ -215,7 +215,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document PdfDocument, err er
 	return pdf, nil
 }
 
-func (p *PdfHandler) ClosePDF(document PdfDocument) (err error) {
+func (p *PdfHandler) ClosePDF(document *PdfDocument) (err error) {
 	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.ClosePDF")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
@@ -248,14 +248,14 @@ func (p *PdfHandler) ClosePDF(document PdfDocument) (err error) {
 	return nil
 }
 
-func (p *PdfHandler) GetPageSize(document PdfDocument, page int) (pageSize PageSize, err error) {
+func (p *PdfHandler) GetPageSize(document *PdfDocument, page int) (pageSize PageSize, err error) {
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.GetPageSize")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
 	return p.GetPageSizeWithContext(ctx, document, page)
 }
 
-func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document PdfDocument, page int) (pageSize PageSize, err error) {
+func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document *PdfDocument, page int) (pageSize PageSize, err error) {
 	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.GetPageSize")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
@@ -324,7 +324,7 @@ func (p *PdfHandler) wrapPageContents(ctx context.Context, document *PdfDocument
 	return nil
 }
 
-func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (err error) {
+func (p *PdfHandler) AddImageToPage(document *PdfDocument, params ImageParams) (err error) {
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddImageToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
@@ -358,7 +358,7 @@ func (p *PdfHandler) AddImageToPage(document PdfDocument, params ImageParams) (e
 		height: C.float(height),
 	}
 
-	err = p.wrapPageContents(ctx, &document, params.Page)
+	err = p.wrapPageContents(ctx, document, params.Page)
 	if err != nil {
 		return fmt.Errorf("failure at the AddImageToPage function:: %s", err)
 	}
@@ -494,7 +494,7 @@ func (p *PdfHandler) getFontAttributes(ctx context.Context, font string, fontSiz
 	return "", 0, fmt.Errorf("font %q not found", font)
 }
 
-func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (err error) {
+func (p *PdfHandler) AddTextBoxToPage(document *PdfDocument, params TextParams) (err error) {
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddTextBoxToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
@@ -544,7 +544,7 @@ func (p *PdfHandler) AddTextBoxToPage(document PdfDocument, params TextParams) (
 		font_size:   C.float(params.Font.Size),
 	}
 
-	err = p.wrapPageContents(ctx, &document, params.Page)
+	err = p.wrapPageContents(ctx, document, params.Page)
 	if err != nil {
 		return fmt.Errorf("failure at the AddTextBoxToPage function: %s", err)
 	}
@@ -572,7 +572,7 @@ func boolToInt(value bool) int {
 	return 0
 }
 
-func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxParams) (err error) {
+func (p *PdfHandler) AddCheckboxToPage(document *PdfDocument, params CheckboxParams) (err error) {
 	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.AddCheckboxToPage")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
@@ -603,7 +603,7 @@ func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxPara
 		height: C.float(height),
 	}
 
-	err = p.wrapPageContents(ctx, &document, params.Page)
+	err = p.wrapPageContents(ctx, document, params.Page)
 	if err != nil {
 		return fmt.Errorf("failure at the AddCheckboxToPage function: %s", err)
 	}
@@ -624,7 +624,7 @@ func (p *PdfHandler) AddCheckboxToPage(document PdfDocument, params CheckboxPara
 	return nil
 }
 
-func (p *PdfHandler) SavePDF(document PdfDocument, filePath string) (err error) {
+func (p *PdfHandler) SavePDF(document *PdfDocument, filePath string) (err error) {
 	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.SavePDF")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
