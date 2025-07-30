@@ -307,9 +307,18 @@ func (p *PdfHandler) wrapPageContents(ctx context.Context, document *PdfDocument
 		error:  nil,
 	}
 
+	// Measure C function call performance
+	cCallStart := time.Now()
 	output := C.wrap_page_contents_for_page(pdf, C.int(pageNum))
+	cCallDuration := time.Since(cCallStart)
+
+	// Add performance metrics to trace
+	span.SetTag("c_function", "wrap_page_contents_for_page")
+	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
 		return fmt.Errorf("failure at wrap_page_contents_for_page: %s", C.GoString(output.error))
 	}
 
