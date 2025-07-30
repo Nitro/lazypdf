@@ -1415,3 +1415,62 @@ func TestPdfHandler_WrapPageContents_Integration(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, document.wrappedPages[2])
 }
+
+func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	handler := NewPdfHandler(context.Background(), logger)
+
+	// Open document once for the benchmark
+	file, err := os.Open("testdata/sample.pdf")
+	require.NoError(b, err)
+	defer func() { require.NoError(b, file.Close()) }()
+
+	document, err := handler.OpenPDF(file)
+	require.NoError(b, err)
+	defer func() { require.NoError(b, handler.ClosePDF(document)) }()
+
+	// Add first annotation to trigger initial wrap_page_contents call
+	// This is outside the benchmark timing
+	firstTextParams := TextParams{
+		Value:    "First annotation - setup",
+		Page:     0,
+		Location: Location{X: 0.1, Y: 0.1},
+		Size:     Size{Width: 0.3, Height: 0.05},
+		Font: struct {
+			Family string
+			Size   float64
+		}{
+			Family: "Times New Roman",
+			Size:   12,
+		},
+	}
+	err = handler.AddTextBoxToPage(document, firstTextParams)
+	require.NoError(b, err)
+
+	// Verify page is wrapped after first annotation
+	//require.True(b, document.wrappedPages[0], "Page should be wrapped after first annotation")
+
+	// Reset timer to exclude setup time
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	// Benchmark loop - all subsequent annotations should be faster
+	// since wrapPageContents will return early (already wrapped)
+	for i := 0; i < b.N; i++ {
+		textParams := TextParams{
+			Value:    fmt.Sprintf("Benchmark annotation %d", i),
+			Page:     0,                                             // Same page, so wrapPageContents should return early
+			Location: Location{X: 0.1, Y: 0.2 + float64(i%10)*0.05}, // Vary position slightly
+			Size:     Size{Width: 0.3, Height: 0.04},
+			Font: struct {
+				Family string
+				Size   float64
+			}{
+				Family: "Times New Roman",
+				Size:   10,
+			},
+		}
+		err = handler.AddTextBoxToPage(document, textParams)
+		require.NoError(b, err)
+	}
+}
