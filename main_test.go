@@ -11,6 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// normalizeLineEndings converts all line endings to \n
+func normalizeLineEndings(data []byte) []byte {
+	// Replace Windows line endings (\r\n) with Unix (\n)
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	// Replace old Mac line endings (\r) with Unix (\n)
+	data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
+	return data
+}
+
 func TestSaveToHTMLOK(t *testing.T) {
 	for i := uint16(0); i < 13; i++ {
 		file, err := os.Open("testdata/sample.pdf")
@@ -25,7 +34,10 @@ func TestSaveToHTMLOK(t *testing.T) {
 		require.NoError(t, err)
 		resultPage, err := io.ReadAll(buf)
 		require.NoError(t, err)
-		require.Equal(t, expectedPage, resultPage)
+
+		expectedNormalized := normalizeLineEndings(expectedPage)
+		resultNormalized := normalizeLineEndings(resultPage)
+		require.Equal(t, expectedNormalized, resultNormalized)
 	}
 }
 

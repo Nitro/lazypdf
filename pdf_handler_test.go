@@ -32,7 +32,7 @@ func TestPdfHandler_OpenPDF(t *testing.T) {
 	if document.handle == 0 {
 		t.Fatalf("handle is null:")
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 }
 
 func TestPdfHandler_OpenInvalidFile(t *testing.T) {
@@ -76,7 +76,7 @@ func TestPdfHandler_TestClosePDF(t *testing.T) {
 		t.Fatalf("OpenPDF: %v", err)
 	}
 
-	if err := handler.ClosePDF(&document); err != nil {
+	if err := handler.ClosePDF(document); err != nil {
 		t.Fatalf("ClosePDF: %v", err)
 	}
 }
@@ -94,12 +94,12 @@ func TestPdfHandler_LocationSizeToPdfPoints_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	//nolint:dogsled // we only care about the error
 	_, _, _, _, err = handler.LocationSizeToPdfPoints(
 		context.Background(),
-		&document,
+		document,
 		2,
 		0,
 		0,
@@ -165,7 +165,7 @@ func TestPdfHandler_LocationSizeToPdfPoints_InvalidInputPercentages(t *testing.T
 			handler := setupPdfHandler(t)
 			document := openTestPDF(t, tt.path)
 
-			_, _, _, _, err := handler.LocationSizeToPdfPoints(context.Background(), &document, 0, tt.x, tt.y, tt.width, tt.height)
+			_, _, _, _, err := handler.LocationSizeToPdfPoints(context.Background(), document, 0, tt.x, tt.y, tt.width, tt.height)
 			require.Error(t, err)
 			require.EqualError(t, err, tt.expectedError)
 		})
@@ -234,7 +234,7 @@ func TestPdfHandler_TestLocationSizeToPdfPoints(t *testing.T) {
 
 			X, Y, Width, Height, err := handler.LocationSizeToPdfPoints(
 				context.Background(),
-				&handle,
+				handle,
 				0,
 				tt.X,
 				tt.Y,
@@ -265,9 +265,9 @@ func TestPdfHandler_GetPageSize_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
-	_, err = handler.GetPageSize(&document, 2)
+	_, err = handler.GetPageSize(document, 2)
 	require.Error(t, err)
 	require.Equal(t, "failure at the C/MuPDF get_page_size function: invalid page number: 3", err.Error())
 }
@@ -293,7 +293,7 @@ func TestPdfHandler_TestGetPageSize(t *testing.T) {
 			handler := setupPdfHandler(t)
 			document := openTestPDF(t, tt.path)
 
-			size, err := handler.GetPageSize(&document, 0)
+			size, err := handler.GetPageSize(document, 0)
 			require.NoError(t, err, "Failed to get page size for file: %s", tt.path)
 
 			require.InDelta(t, tt.expectedWidth, size.Width, 0.1, "Unexpected width for file: %s", tt.path)
@@ -309,7 +309,7 @@ func setupPdfHandler(t *testing.T) PdfHandler {
 	return PdfHandler{Logger: logger}
 }
 
-func openTestPDF(t *testing.T, filePath string) PdfDocument {
+func openTestPDF(t *testing.T, filePath string) *PdfDocument {
 	t.Helper()
 
 	handler := setupPdfHandler(t)
@@ -321,19 +321,19 @@ func openTestPDF(t *testing.T, filePath string) PdfDocument {
 
 	t.Cleanup(func() {
 		require.NoError(t, file.Close())
-		require.NoError(t, handler.ClosePDF(&document))
+		require.NoError(t, handler.ClosePDF(document))
 	})
 
 	return document
 }
 
-func addImageAndSave(t *testing.T, handler PdfHandler, document PdfDocument, params ImageParams, outputPath string) {
+func addImageAndSave(t *testing.T, handler PdfHandler, document *PdfDocument, params ImageParams, outputPath string) {
 	t.Helper()
 
-	err := handler.AddImageToPage(&document, params)
+	err := handler.AddImageToPage(document, params)
 	require.NoError(t, err, "failed to add image")
 
-	err = handler.SavePDF(&document, outputPath)
+	err = handler.SavePDF(document, outputPath)
 	require.NoError(t, err, "failed to save PDF")
 }
 
@@ -442,7 +442,7 @@ func TestPdfHandler_AddImageToPage_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := ImageParams{
 		Page: 13,
@@ -457,7 +457,7 @@ func TestPdfHandler_AddImageToPage_InvalidPage(t *testing.T) {
 		ImagePath: "testdata/test_signature.png",
 	}
 
-	err = handler.AddImageToPage(&document, params)
+	err = handler.AddImageToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at the AddImageToPage function: failed to get page size: failure at the C/MuPDF get_page_size function: invalid page number: 14", err.Error())
 }
@@ -476,7 +476,7 @@ func TestPdfHandler_AddImageToPage_InvalidImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := ImageParams{
 		Page: 0,
@@ -491,7 +491,7 @@ func TestPdfHandler_AddImageToPage_InvalidImage(t *testing.T) {
 		ImagePath: "testdata/test_signature-invalid.png",
 	}
 
-	err = handler.AddImageToPage(&document, params)
+	err = handler.AddImageToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at the C/MuPDF add_image_to_page function: unknown image file format", err.Error())
 }
@@ -702,12 +702,12 @@ func TestPdfHandler_AddTextBoxToPage(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
-			err = handler.AddTextBoxToPage(&document, tt.params)
+			err = handler.AddTextBoxToPage(document, tt.params)
 			require.NoError(t, err, "failed to add text")
 
-			err = handler.SavePDF(&document, tt.outputFile)
+			err = handler.SavePDF(document, tt.outputFile)
 			require.NoError(t, err, "failed to save PDF")
 		})
 	}
@@ -727,7 +727,7 @@ func TestPdfHandler_AddTextBoxToPage_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := TextParams{
 		Value: "Hello, World!",
@@ -742,7 +742,7 @@ func TestPdfHandler_AddTextBoxToPage_InvalidPage(t *testing.T) {
 		}{Family: "Courier", Size: 12},
 	}
 
-	err = handler.AddTextBoxToPage(&document, params)
+	err = handler.AddTextBoxToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at the AddTextBoxToPage function: failed to get page size: failure at the C/MuPDF get_page_size function: invalid page number: 2", err.Error())
 }
@@ -761,7 +761,7 @@ func TestPdfHandler_AddTextBoxToPage_InvalidTextLengh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := TextParams{
 		Value: strings.Repeat("a", 301),
@@ -776,7 +776,7 @@ func TestPdfHandler_AddTextBoxToPage_InvalidTextLengh(t *testing.T) {
 		}{Family: "Courier", Size: 12},
 	}
 
-	err = handler.AddTextBoxToPage(&document, params)
+	err = handler.AddTextBoxToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at the C/MuPDF add_text_to_page function: Text exceeds maximum allowed size. Expected: 300, Actual: 301", err.Error())
 }
@@ -795,7 +795,7 @@ func TestPdfHandler_AddTextBoxToPage_InvalidFont(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := TextParams{
 		Value: "Hello, World!",
@@ -810,7 +810,7 @@ func TestPdfHandler_AddTextBoxToPage_InvalidFont(t *testing.T) {
 		}{Family: "[not existing font]", Size: 12},
 	}
 
-	err = handler.AddTextBoxToPage(&document, params)
+	err = handler.AddTextBoxToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at PdfHandler AddTextBoxToPage function: failed to find font path for \"[not existing font]\"", err.Error())
 }
@@ -907,12 +907,12 @@ func TestPdfHandler_AddCheckboxToPage(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
-			err = handler.AddCheckboxToPage(&document, tt.params)
+			err = handler.AddCheckboxToPage(document, tt.params)
 			require.NoError(t, err, "failed to add checkbox")
 
-			err = handler.SavePDF(&document, tt.outputFile)
+			err = handler.SavePDF(document, tt.outputFile)
 			require.NoError(t, err, "failed to save PDF")
 		})
 	}
@@ -932,7 +932,7 @@ func TestPdfHandler_AddCheckboxToPage_InvalidPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := CheckboxParams{
 		Value: true,
@@ -947,7 +947,7 @@ func TestPdfHandler_AddCheckboxToPage_InvalidPage(t *testing.T) {
 		}{Width: 20, Height: 20},
 	}
 
-	err = handler.AddCheckboxToPage(&document, params)
+	err = handler.AddCheckboxToPage(document, params)
 	require.Error(t, err)
 	require.Equal(t, "failure at the AddCheckboxToPage function: failed to get page size: failure at the C/MuPDF get_page_size function: invalid page number: 4", err.Error())
 }
@@ -966,11 +966,11 @@ func TestPdfHandler_SavePDF_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenPDF: %v", err)
 	}
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	outputPath := "tmp/output.pdf"
 
-	err = handler.SavePDF(&document, outputPath)
+	err = handler.SavePDF(document, outputPath)
 	if err != nil {
 		t.Fatalf("failed to save PDF: %v", err)
 	}
@@ -983,14 +983,14 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 		name       string
 		inputFile  string
 		outputFile string
-		operations []func(handler PdfHandler, document PdfDocument) error
+		operations []func(handler PdfHandler, document *PdfDocument) error
 	}{
 		{
 			name:       "Multiple operations on sample.pdf",
 			inputFile:  "testdata/pdf_handler_sample.pdf",
 			outputFile: "tmp/output_multiple_operations.pdf",
-			operations: []func(handler PdfHandler, document PdfDocument) error{
-				func(handler PdfHandler, document PdfDocument) error {
+			operations: []func(handler PdfHandler, document *PdfDocument) error{
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := TextParams{
 						Value: "The quick brown fox jumps over the lazy dog!",
 						Page:  0,
@@ -1003,9 +1003,9 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 							Size   float64
 						}{Family: "Courier", Size: 12},
 					}
-					return handler.AddTextBoxToPage(&document, params)
+					return handler.AddTextBoxToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := TextParams{
 						Value: "The quick brown fox jumps over the lazy dog!",
 						Page:  0,
@@ -1018,9 +1018,9 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 							Size   float64
 						}{Family: "Courier", Size: 14},
 					}
-					return handler.AddTextBoxToPage(&document, params)
+					return handler.AddTextBoxToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := ImageParams{
 						Page: 0,
 						Location: struct {
@@ -1033,9 +1033,9 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 						}{Width: 0.163, Height: 0.063},
 						ImagePath: "testdata/test_signature.png",
 					}
-					return handler.AddImageToPage(&document, params)
+					return handler.AddImageToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := CheckboxParams{
 						Value: true,
 						Page:  0,
@@ -1048,9 +1048,9 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 							Height float64
 						}{Width: 0.0327, Height: 0.0253},
 					}
-					return handler.AddCheckboxToPage(&document, params)
+					return handler.AddCheckboxToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := CheckboxParams{
 						Value: false,
 						Page:  0,
@@ -1063,7 +1063,7 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 							Height float64
 						}{Width: 0.0327, Height: 0.0253},
 					}
-					return handler.AddCheckboxToPage(&document, params)
+					return handler.AddCheckboxToPage(document, params)
 				},
 			},
 		},
@@ -1082,14 +1082,14 @@ func TestPdfHandler_MultipleOperations(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			for _, operation := range tt.operations {
 				err := operation(handler, document)
 				require.NoError(t, err, "Operation failed")
 			}
 
-			err = handler.SavePDF(&document, tt.outputFile)
+			err = handler.SavePDF(document, tt.outputFile)
 			require.NoError(t, err, "Failed to save PDF")
 		})
 	}
@@ -1102,14 +1102,14 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 		name       string
 		inputFile  string
 		outputFile string
-		operations []func(handler PdfHandler, document PdfDocument) error
+		operations []func(handler PdfHandler, document *PdfDocument) error
 	}{
 		{
 			name:       "Multiple operations on texboxes.pdf",
 			inputFile:  "testdata/textboxes.pdf",
 			outputFile: "tmp/output_textboxes.pdf",
-			operations: []func(handler PdfHandler, document PdfDocument) error{
-				func(handler PdfHandler, document PdfDocument) error {
+			operations: []func(handler PdfHandler, document *PdfDocument) error{
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := ImageParams{
 						Page: 0,
 						Location: struct {
@@ -1122,9 +1122,9 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 						}{Width: 0.1633986928, Height: 0.0151515152},
 						ImagePath: "testdata/test_blue_box.png",
 					}
-					return handler.AddImageToPage(&document, params)
+					return handler.AddImageToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := ImageParams{
 						Page: 0,
 						Location: struct {
@@ -1137,9 +1137,9 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 						}{Width: 0.1633986928, Height: 0.0151515152},
 						ImagePath: "testdata/test_blue_box.png",
 					}
-					return handler.AddImageToPage(&document, params)
+					return handler.AddImageToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := ImageParams{
 						Page: 0,
 						Location: struct {
@@ -1152,9 +1152,9 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 						}{Width: 0.1633986928, Height: 0.0151515152},
 						ImagePath: "testdata/test_blue_box.png",
 					}
-					return handler.AddImageToPage(&document, params)
+					return handler.AddImageToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := TextParams{
 						Value: "Qjstom",
 						Page:  0,
@@ -1171,9 +1171,9 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 							Size   float64
 						}{Family: "Times New Roman", Size: 12},
 					}
-					return handler.AddTextBoxToPage(&document, params)
+					return handler.AddTextBoxToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := TextParams{
 						Value: "qjWaAJj",
 						Page:  0,
@@ -1190,9 +1190,9 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 							Size   float64
 						}{Family: "Times New Roman", Size: 12},
 					}
-					return handler.AddTextBoxToPage(&document, params)
+					return handler.AddTextBoxToPage(document, params)
 				},
-				func(handler PdfHandler, document PdfDocument) error {
+				func(handler PdfHandler, document *PdfDocument) error {
 					params := TextParams{
 						Value: "QqWwJj",
 						Page:  0,
@@ -1209,7 +1209,7 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 							Size   float64
 						}{Family: "Times New Roman", Size: 12},
 					}
-					return handler.AddTextBoxToPage(&document, params)
+					return handler.AddTextBoxToPage(document, params)
 				},
 			},
 		},
@@ -1228,14 +1228,14 @@ func TestPdfHandler_MultipleOperationsOnTextboxes(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err, "OpenPDF failed")
-			defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			for _, operation := range tt.operations {
 				err := operation(handler, document)
 				require.NoError(t, err, "Operation failed")
 			}
 
-			err = handler.SavePDF(&document, tt.outputFile)
+			err = handler.SavePDF(document, tt.outputFile)
 			require.NoError(t, err, "Failed to save PDF")
 		})
 	}
@@ -1255,7 +1255,7 @@ func TestPdfHandler_SaveToPNGOK(t *testing.T) {
 
 			document, err := handler.OpenPDF(file)
 			require.NoError(t, err)
-			defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 			buf := bytes.NewBuffer([]byte{})
 			err = handler.SaveToPNG(document, i, 0, 0, 0, buf)
@@ -1301,7 +1301,7 @@ func benchmarkPdfHandlerSaveToPNGRunner(page uint16, b *testing.B) {
 		err = handler.SaveToPNG(document, page, 0, 0, 0, output)
 		require.NoError(b, err)
 
-		err = handler.ClosePDF(&document)
+		err = handler.ClosePDF(document)
 		require.NoError(b, err)
 	}
 }
@@ -1318,18 +1318,18 @@ func TestPdfHandler_WrapPageContents(t *testing.T) {
 
 	document, err := handler.OpenPDF(file)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	// Initially, no pages should be wrapped
 	require.False(t, document.wrappedPages[0])
 
 	// First call to wrapPageContents for page 0 should mark it as wrapped
-	err = handler.wrapPageContents(context.Background(), &document, 0)
+	err = handler.wrapPageContents(context.Background(), document, 0)
 	require.NoError(t, err)
 	require.True(t, document.wrappedPages[0])
 
 	// Second call to wrapPageContents for page 0 should not error and page should still be marked as wrapped
-	err = handler.wrapPageContents(context.Background(), &document, 0)
+	err = handler.wrapPageContents(context.Background(), document, 0)
 	require.NoError(t, err)
 	require.True(t, document.wrappedPages[0])
 
@@ -1350,10 +1350,10 @@ func TestPdfHandler_WrapPageContents_InvalidPage(t *testing.T) {
 
 	document, err := handler.OpenPDF(file)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	// Call wrapPageContents with invalid page number should return error
-	err = handler.wrapPageContents(context.Background(), &document, 2)
+	err = handler.wrapPageContents(context.Background(), document, 2)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failure at wrap_page_contents_for_page")
 }
@@ -1370,7 +1370,7 @@ func TestPdfHandler_WrapPageContents_Integration(t *testing.T) {
 
 	document, err := handler.OpenPDF(file)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	// Test that annotation functions automatically wrap page contents
 	require.False(t, document.wrappedPages[0])
@@ -1387,7 +1387,7 @@ func TestPdfHandler_WrapPageContents_Integration(t *testing.T) {
 			Size:   12,
 		},
 	}
-	err = handler.AddTextBoxToPage(&document, textParams)
+	err = handler.AddTextBoxToPage(document, textParams)
 	require.NoError(t, err)
 	require.True(t, document.wrappedPages[0])
 
@@ -1399,7 +1399,7 @@ func TestPdfHandler_WrapPageContents_Integration(t *testing.T) {
 		Size:      Size{Width: 0.2, Height: 0.2},
 		ImagePath: "testdata/test_signature.png",
 	}
-	err = handler.AddImageToPage(&document, imageParams)
+	err = handler.AddImageToPage(document, imageParams)
 	require.NoError(t, err)
 	require.True(t, document.wrappedPages[1]) // Should still be true
 
@@ -1411,7 +1411,7 @@ func TestPdfHandler_WrapPageContents_Integration(t *testing.T) {
 		Location: Location{X: 0.7, Y: 0.7},
 		Size:     Size{Width: 0.05, Height: 0.05},
 	}
-	err = handler.AddCheckboxToPage(&document, checkboxParams)
+	err = handler.AddCheckboxToPage(document, checkboxParams)
 	require.NoError(t, err)
 	require.True(t, document.wrappedPages[2])
 }
@@ -1426,7 +1426,7 @@ func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
 
 	document, err := handler.OpenPDF(file)
 	require.NoError(b, err)
-	defer func() { require.NoError(b, handler.ClosePDF(&document)) }()
+	defer func() { require.NoError(b, handler.ClosePDF(document)) }()
 
 	// Add first annotation to trigger initial wrap_page_contents call
 	// This is outside the benchmark timing
@@ -1443,7 +1443,7 @@ func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
 			Size:   12,
 		},
 	}
-	err = handler.AddTextBoxToPage(&document, firstTextParams)
+	err = handler.AddTextBoxToPage(document, firstTextParams)
 	require.NoError(b, err)
 
 	require.True(b, document.wrappedPages[0], "Page should be wrapped after first annotation")
@@ -1468,7 +1468,7 @@ func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
 				Size:   10,
 			},
 		}
-		err = handler.AddTextBoxToPage(&document, textParams)
+		err = handler.AddTextBoxToPage(document, textParams)
 		require.NoError(b, err)
 	}
 }
