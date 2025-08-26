@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.23.3
 
 require (
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	golang.org/x/image v0.29.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.71.1
 )
