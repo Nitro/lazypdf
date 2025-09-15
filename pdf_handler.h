@@ -17,9 +17,7 @@ typedef struct {
     char *error;
 } pdfDocument;
 
-
 pdfDocument open_pdf(openPDFInput);
-
 
 typedef struct {
     char *error; // NULL if successful
@@ -92,7 +90,7 @@ typedef struct {
     int width;
     float scale;
     int dpi;
-	fz_cookie *cookie;
+    fz_cookie *cookie;
 } saveToPNGInput;
 
 typedef struct {
