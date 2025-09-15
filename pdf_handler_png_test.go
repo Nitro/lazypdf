@@ -60,7 +60,7 @@ func benchmarkPdfHandlerSaveToPNGRunner(page uint16, b *testing.B) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	handler := NewPdfHandler(context.Background(), logger)
 
-	buf, err := os.ReadFile("testdata/pdf_handler_sample.pdf")
+	buf, err := os.ReadFile("testdata/sample.pdf")
 	require.NoError(b, err)
 
 	b.ReportAllocs()
