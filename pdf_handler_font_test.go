@@ -1,6 +1,5 @@
-//go:build mupdf_font
-
-package pdf_handler
+// nolint
+package lazypdf
 
 import (
 	"context"
@@ -58,7 +57,7 @@ func TestPdfHandler_TestGetFontAttributes_FontPath(t *testing.T) {
 	}
 }
 
-func TestPdfHandler_TestGetFontAttributes_Descender(t *testing.T) {
+func TestPdfHandler_GetFontAttributes_Descender(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))

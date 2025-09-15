@@ -1,4 +1,3 @@
-// nolint
 package lazypdf
 
 import (

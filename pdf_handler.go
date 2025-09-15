@@ -1,4 +1,3 @@
-// nolint
 package lazypdf
 
 import (
@@ -135,7 +134,7 @@ var standardFontList = []struct {
 }
 
 func savePayloadToTempFile(ctx context.Context, r io.Reader) (filename string, err error) {
-	span, ctx := ddTracer.StartSpanFromContext(ctx, "savePayloadToTempFile")
+	span, _ := ddTracer.StartSpanFromContext(ctx, "savePayloadToTempFile")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
 	if r == nil {
