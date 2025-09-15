@@ -625,7 +625,7 @@ func BenchmarkPdfHandler_SoftSave(b *testing.B) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	handler := PdfHandler{Logger: logger}
 
-	file, err := os.Open("testdata/00a730a587c1db1d59fa6dad689e2bf6a528cf98fd3a44891f193ef9bbc6a5cb.pdf")
+	file, err := os.Open("testdata/textboxes.pdf")
 	require.NoError(b, err)
 	defer func() { _ = file.Close() }()
 
@@ -634,7 +634,7 @@ func BenchmarkPdfHandler_SoftSave(b *testing.B) {
 	defer func() { _ = handler.ClosePDF(document) }()
 
 	timestamp := time.Now().Format("20060102_150405")
-	tmpDir := filepath.Join("../../tmp", timestamp)
+	tmpDir := filepath.Join("tmp", timestamp)
 	require.NoError(b, os.MkdirAll(tmpDir, 0o755))
 
 	b.ResetTimer()
