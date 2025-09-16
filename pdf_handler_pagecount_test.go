@@ -1,3 +1,4 @@
+// nolint
 package lazypdf
 
 /*
@@ -17,7 +18,7 @@ import (
 func TestPageCount(t *testing.T) {
     t.Parallel()
 
-    file, err := os.Open("testdata/sample.pdf")
+    file, err := os.Open("testdata/pdf_handler_sample.pdf")
     require.NoError(t, err)
     defer func() { require.NoError(t, file.Close()) }()
 
