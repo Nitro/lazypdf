@@ -654,6 +654,7 @@ saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
         output.payload_length = main_output.payload_length;
         output.error = main_output.error;
         
+        
     } fz_catch(ctx) {
         output.error = strdup(fz_caught_message(ctx));
     }

@@ -68,13 +68,13 @@ type Size struct {
 
 type ImageParams struct {
 	Page int
-	// Specify location as percentages relative to page dimensions:
+	// Specify location in PDF points (1 point = 1/72 inch):
 	//   (0,0) represents the upper-left corner.
-	//   (1,1) represents the bottom-right corner.
+	//   (pageWidth, pageHeight) represents the bottom-right corner.
 	Location Location
-	// Specify size as a percentage of page dimensions:
+	// Specify size in PDF points (1 point = 1/72 inch):
 	//   0 represents zero size.
-	//   1 represents the full page width or height
+	//   pageWidth/pageHeight represents the full page width or height
 	Size      Size
 	ImagePath string
 }
@@ -82,13 +82,13 @@ type ImageParams struct {
 type TextParams struct {
 	Value string
 	Page  int
-	// Specify location as percentages relative to page dimensions:
+	// Specify location in PDF points (1 point = 1/72 inch):
 	//   (0,0) represents the upper-left corner.
-	//   (1,1) represents the bottom-right corner.
+	//   (pageWidth, pageHeight) represents the bottom-right corner.
 	Location Location
-	// Set the text bounding box size as a percentage of the page size:
+	// Set the text bounding box size in PDF points (1 point = 1/72 inch):
 	//   0 represents zero size.
-	//   1 represents the full page width or height
+	//   pageWidth/pageHeight represents the full page width or height
 	Size Size
 	Font struct {
 		Family string
@@ -99,13 +99,13 @@ type TextParams struct {
 type CheckboxParams struct {
 	Value bool
 	Page  int
-	// Specify location as percentages relative to page dimensions:
+	// Specify location in PDF points (1 point = 1/72 inch):
 	//   (0,0) represents the upper-left corner.
-	//   (1,1) represents the bottom-right corner.
+	//   (pageWidth, pageHeight) represents the bottom-right corner.
 	Location Location
-	// Specify size as a percentage of page dimensions:
+	// Specify size in PDF points (1 point = 1/72 inch):
 	//   0 represents zero size.
-	//   1 represents the full page width or height
+	//   pageWidth/pageHeight represents the full page width or height
 	Size Size
 }
 
@@ -159,23 +159,20 @@ func savePayloadToTempFile(ctx context.Context, r io.Reader) (filename string, e
 	return tmpFile.Name(), nil
 }
 
-// Percentages relative to page dimensions to PDF Point
-func (p *PdfHandler) LocationSizeToPdfPoints(ctx context.Context, document *PdfDocument, page int, x, y, width, height float64) (float64, float64, float64, float64, error) {
-	span, _ := ddTracer.StartSpanFromContext(ctx, "PdfHandler.LocationSizeToPdfPoints")
+// ConvertTopLeftToBottomLeft converts PDF point coordinates from top-left origin to bottom-left origin
+// PDF coordinate system uses bottom-left as origin, but user input uses top-left as origin
+func (p *PdfHandler) ConvertTopLeftToBottomLeft(ctx context.Context, document *PdfDocument, page int, x, y, height float64) (float64, float64, error) {
+	span, ctx := ddTracer.StartSpanFromContext(ctx, "PdfHandler.ConvertTopLeftToBottomLeft")
 	defer span.Finish()
 
 	pageSize, err := p.GetPageSizeWithContext(ctx, document, page)
 	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("failed to get page size: %w", err)
+		return 0, 0, fmt.Errorf("failed to get page size: %w", err)
 	}
-	if x < 0 || x > 1 || y < 0 || y > 1 || width < 0 || width > 1 || height < 0 || height > 1 {
-		return 0, 0, 0, 0, fmt.Errorf("invalid input percentages: x=%f, y=%f, width=%f, height=%f", x, y, width, height)
-	}
-	return x * pageSize.Width,
-		(1.0 - y - height) * pageSize.Height,
-		width * pageSize.Width,
-		height * pageSize.Height,
-		nil
+
+	// Convert from top-left origin to bottom-left origin
+	bottomLeftY := pageSize.Height - y - height
+	return x, bottomLeftY, nil
 }
 
 func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document *PdfDocument, err error) {
@@ -251,10 +248,7 @@ func (p *PdfHandler) ClosePDF(document *PdfDocument) (err error) {
 }
 
 func (p *PdfHandler) GetPageSize(document *PdfDocument, page int) (pageSize PageSize, err error) {
-	span, ctx := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.GetPageSize")
-	defer func() { span.Finish(ddTracer.WithError(err)) }()
-
-	return p.GetPageSizeWithContext(ctx, document, page)
+	return p.GetPageSizeWithContext(p.ctx, document, page)
 }
 
 func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document *PdfDocument, page int) (pageSize PageSize, err error) {
@@ -338,13 +332,13 @@ func (p *PdfHandler) AddImageToPage(document *PdfDocument, params ImageParams) (
 		error:  nil,
 	}
 
-	x, y, width, height, err := p.LocationSizeToPdfPoints(
+	// Convert from top-left origin (user input) to bottom-left origin (PDF coordinate system)
+	x, y, err := p.ConvertTopLeftToBottomLeft(
 		ctx,
 		document,
 		params.Page,
 		params.Location.X,
 		params.Location.Y,
-		params.Size.Width,
 		params.Size.Height,
 	)
 	if err != nil {
@@ -356,8 +350,8 @@ func (p *PdfHandler) AddImageToPage(document *PdfDocument, params ImageParams) (
 		path:   cImagePath,
 		x:      C.float(x),
 		y:      C.float(y),
-		width:  C.float(width),
-		height: C.float(height),
+		width:  C.float(params.Size.Width),
+		height: C.float(params.Size.Height),
 	}
 
 	err = p.wrapPageContents(ctx, document, params.Page)
@@ -446,7 +440,7 @@ func (p *PdfHandler) generateFontCandidates(ctx context.Context, font string) []
 }
 
 func (p *PdfHandler) getFontAttributes(ctx context.Context, font string, fontSize float64) (fontPath string, descender float64, err error) {
-	span, childCtx := ddTracer.StartSpanFromContext(ctx, "PdfHandler.getFontAttributes")
+	span, ctx := ddTracer.StartSpanFromContext(ctx, "PdfHandler.getFontAttributes")
 	defer func() { span.Finish(ddTracer.WithError(err)) }()
 
 	for _, f := range standardFontList {
@@ -455,7 +449,7 @@ func (p *PdfHandler) getFontAttributes(ctx context.Context, font string, fontSiz
 		}
 	}
 
-	candidates := p.generateFontCandidates(childCtx, font)
+	candidates := p.generateFontCandidates(ctx, font)
 	dirs := []string{
 		"/usr/share/fonts",      // System-wide fonts (Linux)
 		"~/.fonts",              // User fonts (Linux)
@@ -486,7 +480,7 @@ func (p *PdfHandler) getFontAttributes(ctx context.Context, font string, fontSiz
 			return "", 0, err
 		}
 		if path != "" {
-			descender, err := GetDescenderToBaselineFromTTF(childCtx, path, fontSize)
+			descender, err := GetDescenderToBaselineFromTTF(ctx, path, fontSize)
 			if err != nil {
 				return "", 0, fmt.Errorf("failed to compute descender: %w", err)
 			}
@@ -510,13 +504,13 @@ func (p *PdfHandler) AddTextBoxToPage(document *PdfDocument, params TextParams) 
 		error:  nil,
 	}
 
-	x, y, _, _, err := p.LocationSizeToPdfPoints(
+	// Convert from top-left origin (user input) to bottom-left origin (PDF coordinate system)
+	x, y, err := p.ConvertTopLeftToBottomLeft(
 		ctx,
 		document,
 		params.Page,
 		params.Location.X,
 		params.Location.Y,
-		params.Size.Width,
 		params.Size.Height,
 	)
 	if err != nil {
@@ -583,13 +577,13 @@ func (p *PdfHandler) AddCheckboxToPage(document *PdfDocument, params CheckboxPar
 		error:  nil,
 	}
 
-	x, y, width, height, err := p.LocationSizeToPdfPoints(
+	// Convert from top-left origin (user input) to bottom-left origin (PDF coordinate system)
+	x, y, err := p.ConvertTopLeftToBottomLeft(
 		ctx,
 		document,
 		params.Page,
 		params.Location.X,
 		params.Location.Y,
-		params.Size.Width,
 		params.Size.Height,
 	)
 	if err != nil {
@@ -601,8 +595,8 @@ func (p *PdfHandler) AddCheckboxToPage(document *PdfDocument, params CheckboxPar
 		page:   C.int(params.Page),
 		x:      C.float(x),
 		y:      C.float(y),
-		width:  C.float(width),
-		height: C.float(height),
+		width:  C.float(params.Size.Width),
+		height: C.float(params.Size.Height),
 	}
 
 	err = p.wrapPageContents(ctx, document, params.Page)
