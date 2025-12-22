@@ -107,4 +107,25 @@ typedef struct {
 
 wrapPageOutput wrap_page_contents_for_page(pdfDocument document, int page);
 
+typedef struct {
+    int is_restricted;
+    char *error; // NULL if successful
+} checkRestrictionsOutput;
+
+checkRestrictionsOutput check_pdf_restrictions(pdfDocument document);
+
+typedef struct {
+    int needs_password;
+    char *error; // NULL if successful
+} checkPasswordOutput;
+
+checkPasswordOutput check_pdf_password(pdfDocument document);
+
+typedef struct {
+    int has_docmdp_p1;
+    char *error; // NULL if successful
+} checkDocMdpOutput;
+
+checkDocMdpOutput check_pdf_docmdp_p1(pdfDocument document);
+
 #endif

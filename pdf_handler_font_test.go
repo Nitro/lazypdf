@@ -804,3 +804,178 @@ func BenchmarkPdfHandler_WrapPageContentsPerformance(b *testing.B) {
 		require.NoError(b, err)
 	}
 }
+
+func TestPdfHandler_AddTextBoxToPage_UnicodeAndSpecialCharacters(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		text        string
+		fontFamily  string
+		description string
+	}{
+		// Latin accents and diacritics
+		{
+			name:        "French accents",
+			text:        "Frédéric Château",
+			fontFamily:  "Times New Roman",
+			description: "French text with acute and circumflex accents",
+		},
+		{
+			name:        "Spanish accents",
+			text:        "José García Señor",
+			fontFamily:  "Times New Roman",
+			description: "Spanish text with acute accent and tilde",
+		},
+		{
+			name:        "German umlauts",
+			text:        "Müller Größe Übung",
+			fontFamily:  "Times New Roman",
+			description: "German text with umlauts and eszett",
+		},
+		{
+			name:        "Portuguese tildes",
+			text:        "São Paulo não",
+			fontFamily:  "Times New Roman",
+			description: "Portuguese text with tilde",
+		},
+		{
+			name:        "Nordic characters",
+			text:        "Søren Ångström",
+			fontFamily:  "Times New Roman",
+			description: "Nordic text with ø and å",
+		},
+		{
+			name:        "Mixed Latin accents",
+			text:        "Café résumé naïve",
+			fontFamily:  "Times New Roman",
+			description: "Mixed Latin accents: acute, diaeresis",
+		},
+		{
+			name:        "Eastern European",
+			text:        "Kraków Łódź",
+			fontFamily:  "Times New Roman",
+			description: "Polish characters with stroke and acute",
+		},
+		{
+			name:        "Czech and Slovak",
+			text:        "Přemysl Dvořák",
+			fontFamily:  "Times New Roman",
+			description: "Czech characters with caron",
+		},
+
+		// Greek alphabet
+		{
+			name:        "Greek modern",
+			text:        "Ελληνικά Αθήνα",
+			fontFamily:  "Times New Roman",
+			description: "Modern Greek characters",
+		},
+		{
+			name:        "Greek with accents",
+			text:        "Καλημέρα κόσμε",
+			fontFamily:  "Times New Roman",
+			description: "Greek with accent marks",
+		},
+
+		// Cyrillic alphabet
+		{
+			name:        "Russian",
+			text:        "Привет мир",
+			fontFamily:  "Times New Roman",
+			description: "Russian Cyrillic text",
+		},
+		{
+			name:        "Ukrainian",
+			text:        "Київ Україна",
+			fontFamily:  "Times New Roman",
+			description: "Ukrainian Cyrillic with specific characters",
+		},
+
+		// PDF special characters that need escaping
+		{
+			name:        "Parentheses",
+			text:        "Text with (parentheses) inside",
+			fontFamily:  "Times New Roman",
+			description: "Parentheses must be escaped in PDF strings",
+		},
+		{
+			name:        "Backslashes",
+			text:        "Path\\to\\file",
+			fontFamily:  "Times New Roman",
+			description: "Backslashes must be escaped",
+		},
+		{
+			name:        "Mixed special chars",
+			text:        "Formula: (a\\b) = c",
+			fontFamily:  "Times New Roman",
+			description: "Combined parentheses and backslashes",
+		},
+		{
+			name:        "Complex expression",
+			text:        "f(x) = \\frac{1}{x}",
+			fontFamily:  "Times New Roman",
+			description: "Mathematical expression with special chars",
+		},
+
+		// Combined complexity
+		{
+			name:        "Accents with special chars",
+			text:        "Frédéric's (café)",
+			fontFamily:  "Times New Roman",
+			description: "Combining accents with PDF special characters",
+		},
+		{
+			name:        "Real world example",
+			text:        "€50 für Müller (Zürich)",
+			fontFamily:  "Times New Roman",
+			description: "Real-world text with multiple Unicode types",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+			handler := NewPdfHandler(context.Background(), logger)
+
+			file, err := os.Open("testdata/pdf_handler_sample.pdf")
+			require.NoError(t, err)
+			defer func() { require.NoError(t, file.Close()) }()
+
+			document, err := handler.OpenPDF(file)
+			require.NoError(t, err, "OpenPDF failed")
+			defer func() { require.NoError(t, handler.ClosePDF(document)) }()
+
+			params := TextParams{
+				Value: tt.text,
+				Page:  0,
+				Location: Location{
+					X: 50,
+					Y: 100,
+				},
+				Size: Size{
+					Width:  400,
+					Height: 20,
+				},
+				Font: struct {
+					Family string
+					Size   float64
+				}{Family: tt.fontFamily, Size: 12},
+			}
+
+			err = handler.AddTextBoxToPage(document, params)
+			require.NoError(t, err, "failed to add text: %s (description: %s)", tt.text, tt.description)
+
+			outputFile := fmt.Sprintf("tmp/output_unicode_%s.pdf", strings.ReplaceAll(tt.name, " ", "_"))
+			err = handler.SavePDF(document, outputFile)
+			require.NoError(t, err, "failed to save PDF")
+
+			// Verify file exists and has content
+			info, err := os.Stat(outputFile)
+			require.NoError(t, err, "output file should exist")
+			require.Greater(t, info.Size(), int64(0), "output file should have content")
+		})
+	}
+}

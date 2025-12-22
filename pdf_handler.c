@@ -60,7 +60,7 @@ int page_insert_content_to_content_stream(fz_context *ctx, pdf_page *page, fz_bu
         if (append)
             pdf_array_push(ctx, existing_content, new_stream);
         else
-            pdf_array_insert(ctx, existing_content, new_stream, 0);        
+            pdf_array_insert(ctx, existing_content, new_stream, 0);
     }
     else {
         pdf_obj *array = pdf_new_array(ctx, page->doc, 5);
@@ -90,7 +90,7 @@ void wrap_page_contents(fz_context *ctx, pdf_page *page) {
 
     int prepend = 0;
     int append = 0;
-    
+
     resources = pdf_dict_get(ctx, page->obj, PDF_NAME(Resources));
     contents = pdf_dict_get(ctx, page->obj, PDF_NAME(Contents));
 
@@ -352,13 +352,33 @@ addImageOutput add_image_to_page(pdfDocument document, addImageInput input) {
     return output;
 }
 
-void page_add_text(fz_context *ctx, pdf_page *page, const char *text, fz_point position, fz_font *font, float font_size, const char *encoding_name) {
+// Convert UTF-8 text to CID hex string for Identity-H encoded CID fonts
+// For CID fonts, each character is encoded as a 2-byte CID (glyph ID)
+void append_text_as_cid_hex_string(fz_context *ctx, fz_buffer *buf, fz_font *font, const char *text) {
+    int c, gid;
+    const char *s = text;
+    
+    fz_append_byte(ctx, buf, '<');  // Start hex string
+    
+    while (*s) {
+        s += fz_chartorune(&c, s);  // Decode UTF-8 to Unicode codepoint
+        gid = fz_encode_character(ctx, font, c);  // Get glyph ID for this character
+        if (gid <= 0)
+            gid = 0;  // Use .notdef glyph if character not found
+        
+        // Write glyph ID as 4-digit hex (2 bytes)
+        fz_append_printf(ctx, buf, "%04x", gid);
+    }
+    
+    fz_append_byte(ctx, buf, '>');  // End hex string
+}
+
+void page_add_text(fz_context *ctx, pdf_page *page, const char *text, fz_point position, fz_font *font, float font_size) {
     fz_buffer *stream           = NULL;
     pdf_obj *resources          = NULL;
     pdf_obj *font_dict          = NULL;
     pdf_obj *font_ref           = NULL;
     char resource_name[32]      = "";
-    int encoding                = PDF_SIMPLE_ENCODING_LATIN;
     fz_matrix matrix            = fz_identity;
     size_t max_length           = 300;
 
@@ -372,24 +392,14 @@ void page_add_text(fz_context *ctx, pdf_page *page, const char *text, fz_point p
             fz_throw(ctx, FZ_ERROR_GENERIC, "Text exceeds maximum allowed size. Expected: %zu, Actual: %zu", max_length, text_length);
         }
 
-        stream = fz_new_buffer(ctx, text_length  + 500);
+        stream = fz_new_buffer(ctx, text_length * 2 + 500);
 
-        // Add font to Resources
+        // Add font to Resources using CID font for full Unicode support
         resources   = get_or_create_dict(ctx, page->obj, PDF_NAME(Resources));
         font_dict   = get_or_create_dict(ctx, resources, PDF_NAME(Font));
 
-        if (encoding_name) {
-            if (!strcmp(encoding_name, "Latin")) {
-                encoding = PDF_SIMPLE_ENCODING_LATIN;
-            }
-            else if (!strcmp(encoding_name, "Greek")) {
-                encoding = PDF_SIMPLE_ENCODING_GREEK;
-            }
-            else if (!strcmp(encoding_name, "Cyrillic")) {
-                encoding = PDF_SIMPLE_ENCODING_CYRILLIC;
-            }
-        }
-        font_ref = pdf_add_simple_font(ctx, page->doc, font, encoding);
+        // Use CID font (Identity-H encoding) for full Unicode support
+        font_ref = pdf_add_cid_font(ctx, page->doc, font);
         fz_snprintf(resource_name, sizeof(resource_name), "Font%d", pdf_to_num(ctx, font_ref));
         pdf_dict_puts(ctx, font_dict, resource_name, font_ref);
 
@@ -410,9 +420,8 @@ void page_add_text(fz_context *ctx, pdf_page *page, const char *text, fz_point p
             font_size
         );                                                  // Sets the font
         fz_append_string(ctx, stream, "0 0 Td\n");          // Set the text position
-        fz_append_printf(ctx, stream, "(%s) Tj\n",
-            text
-        );                                                  // Draw text
+        append_text_as_cid_hex_string(ctx, stream, font, text);  // Append text as hex string for CID font
+        fz_append_string(ctx, stream, " Tj\n");             // Draw text operator
         fz_append_string(ctx, stream, "ET\n");              // Ends the text object.
         fz_append_string(ctx, stream, "Q\n");               // Restores the previously saved graphics state
         page_add_content_to_content_stream(ctx, page, stream);
@@ -458,7 +467,7 @@ addTextOutput add_text_to_page(pdfDocument document, addTextInput input) {
         }
         fz_point position = {input.x, input.y};
 
-        page_add_text(ctx, page, input.text, position,font, input.font_size, "Latin");
+        page_add_text(ctx, page, input.text, position, font, input.font_size);
     }
     fz_always(ctx) {
         fz_drop_font(ctx, font);
@@ -645,10 +654,10 @@ saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
         params.scale = input.scale;
         params.dpi = input.dpi;
         params.cookie = input.cookie;
-        
+
         // Call the main.c function
         save_to_png_output main_output = save_to_png_with_document(ctx, doc, params);
-        
+
         // Convert save_to_png_output to saveToPNGOutput
         output.payload = main_output.payload;
         output.payload_length = main_output.payload_length;
@@ -658,7 +667,7 @@ saveToPNGOutput save_to_png_file(pdfDocument document, saveToPNGInput input) {
     } fz_catch(ctx) {
         output.error = strdup(fz_caught_message(ctx));
     }
-    
+
     fz_drop_context(ctx);
     return output;
 }
@@ -667,7 +676,7 @@ wrapPageOutput wrap_page_contents_for_page(pdfDocument document, int page_number
     wrapPageOutput output = { .error = NULL };
     pdf_document *pdf = NULL;
     pdf_page *page = NULL;
-    
+
     fz_context *ctx = fz_clone_context(global_ctx);
     if (!ctx) {
         output.error = strdup("Context clone failed");
@@ -691,3 +700,150 @@ wrapPageOutput wrap_page_contents_for_page(pdfDocument document, int page_number
     return output;
 }
 
+
+checkRestrictionsOutput check_pdf_restrictions(pdfDocument input) {
+    checkRestrictionsOutput output = { .is_restricted = 0, .error = NULL };
+
+    fz_context *ctx = fz_clone_context(global_ctx);
+    if (!ctx) {
+        output.error = strdup("Context clone failed");
+        return output;
+    }
+
+    fz_try(ctx) {
+        pdf_document *pdf_doc = (pdf_document *)input.handle;
+        fz_document *doc = (fz_document *)pdf_doc;
+
+        int has_edit_permission = fz_has_permission(ctx, doc, FZ_PERMISSION_EDIT);
+        int has_annotate_permission = fz_has_permission(ctx, doc, FZ_PERMISSION_ANNOTATE);
+
+        if (!has_edit_permission || !has_annotate_permission) {
+            output.is_restricted = 1;
+        }
+
+    } fz_catch(ctx) {
+        output.error = strdup(fz_caught_message(ctx));
+    }
+
+    fz_drop_context(ctx);
+    return output;
+}
+checkPasswordOutput check_pdf_password(pdfDocument input) {
+    checkPasswordOutput output = { .needs_password = 0, .error = NULL };
+
+    fz_context *ctx = fz_clone_context(global_ctx);
+    if (!ctx) {
+        output.error = strdup("Context clone failed");
+        return output;
+    }
+
+    fz_try(ctx) {
+        pdf_document *pdf_doc = (pdf_document *)input.handle;
+        fz_document *doc = (fz_document *)pdf_doc;
+
+        // Check if the document is encrypted with a non-blank password
+        // Returns non-zero if a password is required to access the document
+        int needs_password = fz_needs_password(ctx, doc);
+
+        if (needs_password) {
+            output.needs_password = 1;
+        }
+
+    } fz_catch(ctx) {
+        output.error = strdup(fz_caught_message(ctx));
+    }
+
+    fz_drop_context(ctx);
+    return output;
+}
+
+static int check_docmdp_p_value(fz_context *ctx, pdf_obj *transform_params)
+{
+    if (!transform_params)
+        return 0;
+
+    transform_params = pdf_resolve_indirect(ctx, transform_params);
+    // Get the P (Permission) value from TransformParams
+    // P=1: No changes allowed (most restrictive - DocMDP P1)
+    // P=2: Form filling and signing allowed
+    // P=3: Form filling, signing, and annotations allowed
+    int p = pdf_dict_get_int(ctx, transform_params, PDF_NAME(P));
+    return p == 1;
+}
+
+static int check_sig_value_for_docmdp_p1(fz_context *ctx, pdf_obj *sig)
+{
+    if (!sig)
+        return 0;
+
+    sig = pdf_resolve_indirect(ctx, sig);
+
+    pdf_obj *ref = pdf_dict_get(ctx, sig, PDF_NAME(Reference));
+    if (!ref || !pdf_is_array(ctx, ref))
+        return 0;
+
+    int n = pdf_array_len(ctx, ref);
+    for (int i = 0; i < n; ++i)
+    {
+        pdf_obj *sig_ref = pdf_resolve_indirect(ctx, pdf_array_get(ctx, ref, i));
+        if (!sig_ref)
+            continue;
+
+        pdf_obj *method = pdf_dict_get(ctx, sig_ref, PDF_NAME(TransformMethod));
+        if (!pdf_name_eq(ctx, method, PDF_NAME(DocMDP)))
+            continue;
+
+        pdf_obj *params = pdf_dict_get(ctx, sig_ref, PDF_NAME(TransformParams));
+        if (check_docmdp_p_value(ctx, params))
+            return 1;
+    }
+
+    // Nonstandard fallback: some broken files may put TransformParams directly on /Sig
+    pdf_obj *direct_params = pdf_dict_get(ctx, sig, PDF_NAME(TransformParams));
+    if (check_docmdp_p_value(ctx, direct_params))
+        return 1;
+    return 0;
+}
+
+checkDocMdpOutput check_pdf_docmdp_p1(pdfDocument input)
+{
+    checkDocMdpOutput output = {0, NULL};
+    fz_context *ctx = fz_clone_context(global_ctx);
+    if (!ctx)
+    {
+        output.error = strdup("Context clone failed");
+        return output;
+    }
+
+    fz_try(ctx)
+    {
+        pdf_document *doc = (pdf_document *)input.handle;
+
+        pdf_obj *catalog = pdf_dict_get(ctx, pdf_trailer(ctx, doc), PDF_NAME(Root));
+        pdf_obj *perms   = pdf_dict_get(ctx, catalog, PDF_NAME(Perms));
+        pdf_obj *docmdp  = perms ? pdf_dict_get(ctx, perms, PDF_NAME(DocMDP)) : NULL;
+
+        if (docmdp)
+        {
+            docmdp = pdf_resolve_indirect(ctx, docmdp);
+
+            pdf_obj *type = pdf_dict_get(ctx, docmdp, PDF_NAME(Type));
+            pdf_obj *sig  = NULL;
+
+            if (pdf_name_eq(ctx, type, PDF_NAME(Sig)))
+                sig = docmdp;                                 // direct signature
+            else
+                sig = pdf_dict_get(ctx, docmdp, PDF_NAME(V)); // field V
+
+            if (check_sig_value_for_docmdp_p1(ctx, sig))
+                output.has_docmdp_p1 = 1;
+        }
+    }
+    fz_catch(ctx)
+    {
+        output.error = strdup(fz_caught_message(ctx));
+    }
+
+    fz_drop_context(ctx);
+    return output;
+}

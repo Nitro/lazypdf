@@ -196,7 +196,7 @@ func (p *PdfHandler) OpenPDF(rawPayload io.Reader) (document *PdfDocument, err e
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "open_pdf")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -228,7 +228,7 @@ func (p *PdfHandler) ClosePDF(document *PdfDocument) (err error) {
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "close_pdf")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	removeErr := os.Remove(document.file)
 
@@ -245,6 +245,93 @@ func (p *PdfHandler) ClosePDF(document *PdfDocument) (err error) {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+func (p *PdfHandler) CheckPDFPassword(document *PdfDocument) (needsPassword bool, err error) {
+	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.CheckPDFPassword")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	pdf := C.pdfDocument{
+		handle: document.handle,
+		error:  nil,
+	}
+
+	cCallStart := time.Now()
+	output := C.check_pdf_password(pdf)
+	cCallDuration := time.Since(cCallStart)
+
+	span.SetTag("c_function", "check_pdf_password")
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
+
+	if output.error != nil {
+		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
+		err = fmt.Errorf("failure at the C/MuPDF check_pdf_password function: %s", C.GoString(output.error))
+		return false, err
+	}
+
+	needsPassword = output.needs_password != 0
+	span.SetTag("needs_password", needsPassword)
+	return needsPassword, nil
+}
+
+func (p *PdfHandler) CheckPDFRestrictions(document *PdfDocument) (isRestricted bool, err error) {
+	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.CheckPDFRestrictions")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	pdf := C.pdfDocument{
+		handle: document.handle,
+		error:  nil,
+	}
+
+	cCallStart := time.Now()
+	output := C.check_pdf_restrictions(pdf)
+	cCallDuration := time.Since(cCallStart)
+
+	span.SetTag("c_function", "check_pdf_restrictions")
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
+
+	if output.error != nil {
+		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
+		err = fmt.Errorf("failure at the C/MuPDF check_pdf_restrictions function: %s", C.GoString(output.error))
+		return false, err
+	}
+
+	isRestricted = output.is_restricted != 0
+	span.SetTag("is_restricted", isRestricted)
+	return isRestricted, nil
+}
+
+// CheckPDFDocMdpP1 checks if a document has a DocMDP signature with P=1 (no changes allowed).
+// DocMDP (Document Modification Detection and Prevention) P1 means the document is certified
+// and no modifications are permitted. Any attempt to modify such a document should be rejected.
+func (p *PdfHandler) CheckPDFDocMdpP1(document *PdfDocument) (hasDocMdpP1 bool, err error) {
+	span, _ := ddTracer.StartSpanFromContext(p.ctx, "PdfHandler.CheckPDFDocMdpP1")
+	defer func() { span.Finish(ddTracer.WithError(err)) }()
+
+	pdf := C.pdfDocument{
+		handle: document.handle,
+		error:  nil,
+	}
+
+	cCallStart := time.Now()
+	output := C.check_pdf_docmdp_p1(pdf)
+	cCallDuration := time.Since(cCallStart)
+
+	span.SetTag("c_function", "check_pdf_docmdp_p1")
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
+
+	if output.error != nil {
+		defer C.je_free(unsafe.Pointer(output.error))
+		span.SetTag("c_function_error", true)
+		err = fmt.Errorf("failure at the C/MuPDF check_pdf_docmdp_p1 function: %s", C.GoString(output.error))
+		return false, err
+	}
+
+	hasDocMdpP1 = output.has_docmdp_p1 != 0
+	span.SetTag("has_docmdp_p1", hasDocMdpP1)
+	return hasDocMdpP1, nil
 }
 
 func (p *PdfHandler) GetPageSize(document *PdfDocument, page int) (pageSize PageSize, err error) {
@@ -265,7 +352,7 @@ func (p *PdfHandler) GetPageSizeWithContext(ctx context.Context, document *PdfDo
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "get_page_size")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -307,7 +394,7 @@ func (p *PdfHandler) wrapPageContents(ctx context.Context, document *PdfDocument
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "wrap_page_contents_for_page")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -364,7 +451,7 @@ func (p *PdfHandler) AddImageToPage(document *PdfDocument, params ImageParams) (
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "add_image_to_page")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -550,7 +637,7 @@ func (p *PdfHandler) AddTextBoxToPage(document *PdfDocument, params TextParams) 
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "add_text_to_page")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -609,7 +696,7 @@ func (p *PdfHandler) AddCheckboxToPage(document *PdfDocument, params CheckboxPar
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "add_checkbox_to_page")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -637,7 +724,7 @@ func (p *PdfHandler) SavePDF(document *PdfDocument, filePath string) (err error)
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "save_pdf")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	if output.error != nil {
 		defer C.je_free(unsafe.Pointer(output.error))
@@ -682,7 +769,7 @@ func (p *PdfHandler) SaveToPNG(document *PdfDocument, page, width uint16, scale 
 	cCallDuration := time.Since(cCallStart)
 
 	span.SetTag("c_function", "save_to_png_file")
-	span.SetTag("c_call_duration_ms", float64(cCallDuration.Nanoseconds())/1e6)
+	span.SetTag("c_call_duration_ms", cCallDuration.Milliseconds())
 
 	defer C.je_free(unsafe.Pointer(result.payload))
 	if result.error != nil {
