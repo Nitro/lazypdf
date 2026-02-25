@@ -128,6 +128,23 @@ pdf_obj *get_or_create_dict(fz_context *ctx, pdf_obj *parent, pdf_obj *key) {
     return dict;
 }
 
+// Get the /Resources dictionary for a page, walking up the parent chain if needed.
+// If none is found, create a new one on the page and return it.
+static inline pdf_obj *get_or_create_resources_dict(fz_context *ctx, pdf_obj *page_obj) {
+    pdf_obj *resources = pdf_dict_get(ctx, page_obj, PDF_NAME(Resources));
+    if (resources)
+        return resources;
+    pdf_obj *parent = pdf_dict_get(ctx, page_obj, PDF_NAME(Parent));
+    while (parent) {
+        resources = pdf_dict_get(ctx, parent, PDF_NAME(Resources));
+        if (resources)
+            return resources;
+        parent = pdf_dict_get(ctx, parent, PDF_NAME(Parent));
+    }
+    // None found, create on page
+    return get_or_create_dict(ctx, page_obj, PDF_NAME(Resources));
+}
+
 int  page_get_rotation(fz_context *ctx, pdf_page *page) {
     int rotation = 0;
     rotation = pdf_dict_get_inheritable_int(ctx, page->obj, PDF_NAME(Rotate));
@@ -272,7 +289,7 @@ void page_add_image(fz_context *ctx, pdf_page *page, fz_image *image, fz_rect po
 
     fz_try(ctx) {
         // Add image to Resources
-        resources = get_or_create_dict(ctx, page->obj, PDF_NAME(Resources));
+        resources = get_or_create_resources_dict(ctx, page->obj);
         xobject = get_or_create_dict(ctx, resources, PDF_NAME(XObject));
         image_object = pdf_add_image(ctx, page->doc, image);
         if (!image_object) {
@@ -395,7 +412,7 @@ void page_add_text(fz_context *ctx, pdf_page *page, const char *text, fz_point p
         stream = fz_new_buffer(ctx, text_length * 2 + 500);
 
         // Add font to Resources using CID font for full Unicode support
-        resources   = get_or_create_dict(ctx, page->obj, PDF_NAME(Resources));
+        resources   = get_or_create_resources_dict(ctx, page->obj);
         font_dict   = get_or_create_dict(ctx, resources, PDF_NAME(Font));
 
         // Use CID font (Identity-H encoding) for full Unicode support
@@ -529,7 +546,7 @@ void page_add_checkbox(fz_context *ctx, pdf_page *page, fz_rect position, int is
         if (is_checked) {
             // Add Font to Resources
             font = fz_new_base14_font(ctx, zapdb_font_name);
-            resources = get_or_create_dict(ctx, page->obj, PDF_NAME(Resources));
+            resources = get_or_create_resources_dict(ctx, page->obj);
             font_dict = get_or_create_dict(ctx, resources, PDF_NAME(Font));
             font_ref  = pdf_add_simple_font(ctx, page->doc, font, encoding);
             pdf_dict_puts(ctx, font_dict, zapdb_resource_name, font_ref);
