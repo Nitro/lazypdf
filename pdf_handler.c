@@ -390,6 +390,21 @@ void append_text_as_cid_hex_string(fz_context *ctx, fz_buffer *buf, fz_font *fon
     fz_append_byte(ctx, buf, '>');  // End hex string
 }
 
+// Count UTF-8 characters (codepoints) rather than bytes, so the limit matches the
+// character limit enforced by the calling service regardless of the script used.
+size_t count_utf8_characters(const char *text) {
+    int c;
+    size_t count    = 0;
+    const char *s   = text;
+
+    while (*s) {
+        s += fz_chartorune(&c, s);
+        count++;
+    }
+
+    return count;
+}
+
 void page_add_text(fz_context *ctx, pdf_page *page, const char *text, fz_point position, fz_font *font, float font_size) {
     fz_buffer *stream           = NULL;
     pdf_obj *resources          = NULL;
@@ -397,19 +412,20 @@ void page_add_text(fz_context *ctx, pdf_page *page, const char *text, fz_point p
     pdf_obj *font_ref           = NULL;
     char resource_name[32]      = "";
     fz_matrix matrix            = fz_identity;
-    size_t max_length           = 300;
+    size_t max_length           = 500;
 
     fz_var(stream);
     fz_var(font_ref);
 
     fz_try(ctx) {
 
-        size_t text_length  = strlen(text);
+        size_t text_length  = count_utf8_characters(text);
         if (text_length > max_length) {
             fz_throw(ctx, FZ_ERROR_GENERIC, "Text exceeds maximum allowed size. Expected: %zu, Actual: %zu", max_length, text_length);
         }
 
-        stream = fz_new_buffer(ctx, text_length * 2 + 500);
+        // Each character is written as 4 hex digits by append_text_as_cid_hex_string.
+        stream = fz_new_buffer(ctx, text_length * 4 + 500);
 
         // Add font to Resources using CID font for full Unicode support
         resources   = get_or_create_resources_dict(ctx, page->obj);
