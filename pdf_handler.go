@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"math"
 	"os"
@@ -509,6 +510,9 @@ func (p *PdfHandler) generateFontCandidates(ctx context.Context, font string) []
 
 	unique := make(map[string]struct{})
 	transforms := []func(string) string{
+		// Identity: macOS ships these fonts under their spaced names ("Times New Roman.ttf"), which none
+		// of the space-substituting variants below can produce.
+		func(s string) string { return s },
 		func(s string) string { return strings.ReplaceAll(s, " ", "_") },
 		func(s string) string { return strings.ReplaceAll(s, " ", "-") },
 		func(s string) string { return strings.ReplaceAll(s, " ", "") },
@@ -552,8 +556,18 @@ func (p *PdfHandler) getFontAttributes(ctx context.Context, font string, fontSiz
 		}
 		var path string
 		err := filepath.WalkDir(dir, func(f string, d os.DirEntry, e error) error {
-			if e != nil || d.IsDir() {
+			if e != nil {
+				// dirs is a superset covering both Linux and macOS layouts, so on any given host most of
+				// these are absent. Treating that as fatal made the whole lookup depend on the first entry
+				// existing: /usr/share/fonts is missing on macOS, which failed every non-standard font
+				// before the remaining directories were ever searched.
+				if errors.Is(e, fs.ErrNotExist) || errors.Is(e, fs.ErrPermission) {
+					return fs.SkipDir
+				}
 				return e
+			}
+			if d.IsDir() {
+				return nil
 			}
 			for _, candidate := range candidates {
 				if filepath.Base(f) == candidate {
