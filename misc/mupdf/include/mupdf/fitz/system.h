@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -39,6 +39,13 @@
 #include <setjmp.h> /* needed for the try/catch macros */
 #include <stdio.h> /* useful for debug printfs */
 
+#ifdef __cplusplus
+/* C++ doesn't support flexible array members... */
+#define FZ_FLEXIBLE_ARRAY 1
+#else
+#define FZ_FLEXIBLE_ARRAY
+#endif
+
 #include "export.h"
 
 #if defined(_MSC_VER) && (_MSC_VER < 1700) /* MSVC older than VS2012 */
@@ -55,6 +62,13 @@ typedef unsigned __int64 uint64_t;
 #endif
 #else
 #include <stdint.h> /* needed for int64_t */
+#endif
+
+/* Detect if we can use stdckdint.h */
+#ifdef __has_include
+#if __has_include(<stdckdint.h>)
+#define HAVE_STDCKDINT_H 1
+#endif
 #endif
 
 #include "mupdf/memento.h"
@@ -331,6 +345,19 @@ int fz_mkdir(char *path);
 #else
 #define FZ_POINTER_ALIGN_MOD FZ_MEMORY_BLOCK_ALIGN_MOD
 #endif
+#endif
+
+/*
+ * The undefined behavior sanitizer complains about unaligned loads even on
+ * platforms where unaligned loads are allowed.
+ *
+ * Older compilers don't set __SANITIZE_UNDEFINED__, but we can also
+ * check for __SANITIZE_ADDRESS__ since our sanitize build target enables
+ * both ASAN and UBSAN.
+ */
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__)
+#undef FZ_POINTER_ALIGN_MOD
+#define FZ_POINTER_ALIGN_MOD FZ_MEMORY_BLOCK_ALIGN_MOD
 #endif
 
 #ifdef CLUSTER

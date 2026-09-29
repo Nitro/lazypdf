@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -20,27 +20,39 @@
 // Artifex Software, Inc., 39 Mesa Street, Suite 108A, San Francisco,
 // CA 94129, USA, for further information.
 
-#ifndef MUPDF_FITZ_DESKEW_H
-#define MUPDF_FITZ_DESKEW_H
+#ifndef MUPDF_FITZ_HYPHEN_H
+#define MUPDF_FITZ_HYPHEN_H
 
 #include "mupdf/fitz/system.h"
+#include "mupdf/fitz/types.h"
 #include "mupdf/fitz/context.h"
+#include "mupdf/fitz/text.h"
 
-enum
-{
-	FZ_DESKEW_BORDER_INCREASE = 0,
-	FZ_DESKEW_BORDER_MAINTAIN = 1,
-	FZ_DESKEW_BORDER_DECREASE = 2
+typedef struct fz_hyphenator fz_hyphenator;
+typedef struct fz_hyph_trie fz_hyph_trie;
+
+struct fz_hyphenator {
+	fz_pool *pool;
+	int node_count;
+	int pattern_count;
+	fz_hyph_trie *trie;
 };
 
-fz_pixmap *fz_deskew_pixmap(fz_context *ctx,
-			fz_pixmap *src,
-			double degrees,
-			int border);
+struct fz_hyph_trie
+{
+	char *patval; /* null unless leaf */
+	short patlen; /* num values - 1 in pattern */
+	int ch; /* char to branch on (not used for leaves) */
+	fz_hyph_trie *child;
+	fz_hyph_trie *next;
+};
 
-/* Skew detection */
+fz_hyphenator *fz_new_hyphenator_from_stream(fz_context *ctx, fz_stream *stm);
+void fz_register_hyphenator(fz_context *ctx, fz_text_language lang, fz_hyphenator *hyph);
 
-double fz_detect_skew(fz_context *ctx, fz_pixmap *pixmap);
+void fz_hyphenate_word(fz_context *ctx, fz_hyphenator *hyph, const char *input, int input_size, char *output, int output_size);
+void fz_drop_hyphenator(fz_context *ctx, fz_hyphenator *hyph);
 
+fz_hyphenator *fz_lookup_hyphenator(fz_context *ctx, fz_text_language lang);
 
-#endif /* MUPDF_FITZ_DESKEW_H */
+#endif

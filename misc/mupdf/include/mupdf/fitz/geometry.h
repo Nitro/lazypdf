@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2022 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -26,6 +26,7 @@
 #include "mupdf/fitz/system.h"
 
 #include <math.h>
+#include <limits.h>
 #include <assert.h>
 
 #ifndef M_PI
@@ -178,8 +179,6 @@ static inline void *fz_clampp(void *x, void *min, void *max)
 	return x < min ? min : x > max ? max : x;
 }
 
-#define DIV_BY_ZERO(a, b, min, max) (((a) < 0) ^ ((b) < 0) ? (min) : (max))
-
 /**
 	fz_point is a point in a two-dimensional space.
 */
@@ -277,6 +276,12 @@ FZ_DATA extern const fz_rect fz_infinite_rect;
 FZ_DATA extern const fz_irect fz_infinite_irect;
 
 /**
+	An invalid rectangle.
+*/
+FZ_DATA extern const fz_rect fz_invalid_rect;
+FZ_DATA extern const fz_irect fz_invalid_irect;
+
+/**
 	Check if rectangle is empty.
 
 	An empty rectangle is defined as one whose area is zero.
@@ -340,9 +345,8 @@ fz_irect_width(fz_irect r)
 	 * if it does, it's pretty likely an indication of a severe
 	 * problem. */
 	w = (unsigned int)r.x1 - r.x0;
-	assert((int)w >= 0);
 	if ((int)w < 0)
-		return 0;
+		return INT_MAX;
 	return (int)w;
 }
 
@@ -359,9 +363,8 @@ fz_irect_height(fz_irect r)
 	 * if it does, it's pretty likely an indication of a severe
 	 * problem. */
 	h = (unsigned int)(r.y1 - r.y0);
-	assert((int)h >= 0);
 	if ((int)h < 0)
-		return 0;
+		return INT_MAX;
 	return (int)h;
 }
 
@@ -547,8 +550,6 @@ fz_matrix fz_transform_page(fz_rect mediabox, float resolution, float rotate);
 /**
 	Create an inverse matrix.
 
-	inverse: Place to store inverse matrix.
-
 	matrix: Matrix to invert. A degenerate matrix, where the
 	determinant is equal to zero, can not be inverted and the
 	original matrix is returned instead.
@@ -560,9 +561,9 @@ fz_matrix fz_invert_matrix(fz_matrix matrix);
 /**
 	Attempt to create an inverse matrix.
 
-	inverse: Place to store inverse matrix.
+	inv: Place to store inverse matrix.
 
-	matrix: Matrix to invert. A degenerate matrix, where the
+	src: Matrix to invert. A degenerate matrix, where the
 	determinant is equal to zero, can not be inverted.
 
 	Returns 1 if matrix is degenerate (singular), or 0 otherwise.
@@ -665,6 +666,13 @@ fz_rect fz_expand_rect(fz_rect b, float expand);
 fz_irect fz_expand_irect(fz_irect a, int expand);
 
 /**
+	Calculate the area of a rectangle.
+
+	Always non-negative. All invalid or empty rects return 0.
+*/
+float fz_rect_area(fz_rect r);
+
+/**
 	Expand a bbox to include a given point.
 	To create a rectangle that encompasses a sequence of points, the
 	rectangle must first be set to be the empty rectangle at one of
@@ -686,6 +694,14 @@ fz_irect fz_translate_irect(fz_irect a, int xoff, int yoff);
 	Return true if a entirely contains b.
 */
 int fz_contains_rect(fz_rect a, fz_rect b);
+
+/**
+	Test rectangle overlap.
+
+	Returns true if the area of the overlap is
+	non zero.
+*/
+int fz_overlaps_rect(fz_rect a, fz_rect b);
 
 /**
 	Apply a transformation to a point.
@@ -833,6 +849,30 @@ int fz_is_point_inside_rect(fz_point p, fz_rect r);
 int fz_is_point_inside_irect(int x, int y, fz_irect r);
 
 /**
+	Inclusion test for rects.
+
+	rects are assumed to be both open or both closed.
+
+	No invalid rect can include any other rect.
+	No invalid rect can be included by any rect.
+	Empty (point) rects can include themselves.
+	Empty (line) rects can include many (subline) rects.
+*/
+int fz_is_rect_inside_rect(fz_rect inner, fz_rect outer);
+
+/**
+	Inclusion test for irects.
+
+	rects are assumed to be both open or both closed.
+
+	No invalid rect can include any other rect.
+	No invalid rect can be included by any rect.
+	Empty (point) rects can include themselves.
+	Empty (line) rects can include many (subline) rects.
+*/
+int fz_is_irect_inside_irect(fz_irect inner, fz_irect outer);
+
+/**
 	Inclusion test for quad in quad.
 
 	This may break down if quads are not 'well formed'.
@@ -845,5 +885,74 @@ int fz_is_quad_inside_quad(fz_quad needle, fz_quad haystack);
 	This may break down if quads are not 'well formed'.
 */
 int fz_is_quad_intersecting_quad(fz_quad a, fz_quad b);
+
+/* Checked integer arithmetic helpers -- return whether operation succeeded without overflow or underflow. */
+/* Use builtin C23 ckd_mul, ckd_add, ckd_sub if available. */
+
+#ifdef HAVE_STDCKDINT_H
+
+#include <stdckdint.h>
+
+/* We add explicit casts here to ensure that these match the non-C23 cases below. */
+#define fz_ckd_mul_i32(O,A,B) ckd_mul(O,(int32_t)(A),(int32_t)(B))
+#define fz_ckd_mul_u32(O,A,B) ckd_mul(O,(uint32_t)(A),(uint32_t)(B))
+#define fz_ckd_mul_int(O,A,B) ckd_mul(O,(int)(A),(int)(B))
+#define fz_ckd_mul_uint(O,A,B) ckd_mul(O,(unsigned int)(A),(unsigned int)(B))
+#define fz_ckd_mul_size(O,A,B) ckd_mul(O,(size_t)(A),(size_t)(B))
+#define fz_ckd_mul_i64(O,A,B) ckd_mul(O,(int64_t)(A),(int64_t)(B))
+#define fz_ckd_mul_u64(O,A,B) ckd_mul(O,(uint64_t)(A),(uint64_t)(B))
+
+#define fz_ckd_add_i32(O,A,B) ckd_add(O,(int32_t)(A),(int32_t)(B))
+#define fz_ckd_add_u32(O,A,B) ckd_add(O,(uint32_t)(A),(uint32_t)(B))
+#define fz_ckd_add_int(O,A,B) ckd_add(O,(int)(A),(int)(B))
+#define fz_ckd_add_uint(O,A,B) ckd_add(O,(unsigned int)(A),(unsigned int)(B))
+#define fz_ckd_add_size(O,A,B) ckd_add(O,(size_t)(A),(size_t)(B))
+#define fz_ckd_add_i64(O,A,B) ckd_add(O,(int64_t)(A),(int64_t)(B))
+#define fz_ckd_add_u64(O,A,B) ckd_add(O,(uint64_t)(A),(uint64_t)(B))
+
+#define fz_ckd_sub_i32(O,A,B) ckd_sub(O,(int32_t)(A),(int32_t)(B))
+#define fz_ckd_sub_u32(O,A,B) ckd_sub(O,(uint32_t)(A),(uint32_t)(B))
+#define fz_ckd_sub_int(O,A,B) ckd_sub(O,(int)(A),(int)(B))
+#define fz_ckd_sub_uint(O,A,B) ckd_sub(O,(unsigned int)(A),(unsigned int)(B))
+#define fz_ckd_sub_size(O,A,B) ckd_sub(O,(size_t)(A),(size_t)(B))
+#define fz_ckd_sub_i64(O,A,B) ckd_sub(O,(int64_t)(A),(int64_t)(B))
+#define fz_ckd_sub_u64(O,A,B) ckd_sub(O,(uint64_t)(A),(uint64_t)(B))
+
+#else
+
+int fz_ckd_mul_i32(int32_t *out, int32_t a, int32_t b);
+int fz_ckd_add_i32(int32_t *out, int32_t a, int32_t b);
+int fz_ckd_sub_i32(int32_t *out, int32_t a, int32_t b);
+
+int fz_ckd_mul_u32(uint32_t *out, uint32_t a, uint32_t b);
+int fz_ckd_add_u32(uint32_t *out, uint32_t a, uint32_t b);
+int fz_ckd_sub_u32(uint32_t *out, uint32_t a, uint32_t b);
+
+int fz_ckd_mul_int(int *out, int a, int b);
+int fz_ckd_add_int(int *out, int a, int b);
+int fz_ckd_sub_int(int *out, int a, int b);
+
+int fz_ckd_mul_uint(unsigned int *out, unsigned int a, unsigned int b);
+int fz_ckd_add_uint(unsigned int *out, unsigned int a, unsigned int b);
+int fz_ckd_sub_uint(unsigned int *out, unsigned int a, unsigned int b);
+
+int fz_ckd_mul_size(size_t *out, size_t a, size_t b);
+int fz_ckd_add_size(size_t *out, size_t a, size_t b);
+int fz_ckd_sub_size(size_t *out, size_t a, size_t b);
+
+int fz_ckd_mul_i64(int64_t *out, int64_t a, int64_t b);
+int fz_ckd_add_i64(int64_t *out, int64_t a, int64_t b);
+int fz_ckd_sub_i64(int64_t *out, int64_t a, int64_t b);
+
+int fz_ckd_mul_u64(uint64_t *out, uint64_t a, uint64_t b);
+int fz_ckd_add_u64(uint64_t *out, uint64_t a, uint64_t b);
+int fz_ckd_sub_u64(uint64_t *out, uint64_t a, uint64_t b);
+
+#endif
+
+#define fz_bytes_from_bits(A)  (((A)>>3) + !!((A) & 7))
+
+int fz_ckd_size_from_i64(size_t *out, int64_t in);
+int fz_ckd_int_from_i64(int *out, int64_t in);
 
 #endif
