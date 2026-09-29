@@ -27,7 +27,8 @@ jobs:
 
   build:
     name: Build
-    timeout-minutes: 10
+    # MuPDF 1.28 takes well over 10 minutes to build with -j1.
+    timeout-minutes: 60
     strategy:
       matrix:
         include:
