@@ -47,29 +47,31 @@ jobs:
 
       - name: Checkout MuPDF code
         uses: actions/checkout@v4
+        # Not tmp/: that directory is tracked (tmp/.gitkeep, where tests write their output), and removing the
+        # checkout afterwards would delete it in the commit below.
         with:
           repository: ArtifexSoftware/mupdf
           ref: ${{needs.version.outputs.version}}
           submodules: true
-          path: tmp
+          path: .mupdf-src
 
       - name: Install macOS dependencies
         if: matrix.alias == 'macos'
         run: brew install autoconf gcc
 
       - name: Build MuPDF
-        working-directory: tmp
+        working-directory: .mupdf-src
         # The -j1 is important to avoid 'fork: Resource temporarily unavailable' errors.
         run: make -j1 libs
 
       - name: Update lib
         run: |
           mkdir -p misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}
-          cp tmp/build/release/libmupdf.a misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}/
-          cp tmp/build/release/libmupdf-third.a misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}/
+          cp .mupdf-src/build/release/libmupdf.a misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}/
+          cp .mupdf-src/build/release/libmupdf-third.a misc/mupdf/lib/${{ matrix.architecture }}-${{ matrix.alias }}/
 
       - name: Remove MuPDF temporary folder
-        run: rm -Rf tmp
+        run: rm -Rf .mupdf-src
 
       - name: Commit updated library
         run: |
@@ -97,15 +99,15 @@ jobs:
         with:
           repository: ArtifexSoftware/mupdf
           ref: ${{needs.version.outputs.version}}
-          path: tmp
+          path: .mupdf-src
 
       - name: Update headers
         run: |
           rm -Rf misc/mupdf/include/mupdf
-          cp -R tmp/include/mupdf misc/mupdf/include/
+          cp -R .mupdf-src/include/mupdf misc/mupdf/include/
 
       - name: Remove MuPDF temporary folder
-        run: rm -Rf tmp
+        run: rm -Rf .mupdf-src
 
       - name: Commit updated headers
         run: |
