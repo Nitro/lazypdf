@@ -23,6 +23,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.26.7
+          # Its built-in cache is keyed on go.sum only; the "Go cache" step below also keys on the MuPDF version.
+          cache: false
 
       - name: Go cache
         id: cache
@@ -33,9 +35,11 @@ jobs:
             ~/go/pkg/mod
             ~/go/bin
             ~/Library/Caches/go-build
-          key: ${{ matrix.os }}-go-${{ hashFiles('**/go.sum') }}
+          # The cgo objects compile against the vendored MuPDF headers, which Go's build cache does not track: a cache
+          # built for another MuPDF version links stale objects against the new libraries, so key on the version too.
+          key: ${{ matrix.os }}-go-mupdf-${{ hashFiles('misc/mupdf/version') }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ matrix.os }}-go-
+            ${{ matrix.os }}-go-mupdf-${{ hashFiles('misc/mupdf/version') }}-
 
       - name: Install macOS dependencies
         if: matrix.alias == 'macos'

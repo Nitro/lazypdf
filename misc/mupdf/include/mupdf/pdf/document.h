@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -190,6 +190,25 @@ void pdf_drop_document(fz_context *ctx, pdf_document *doc);
 pdf_document *pdf_keep_document(fz_context *ctx, pdf_document *doc);
 
 /*
+	Do a pass through the document to check if it needs
+	any repairs; and trigger a repair if necessary.
+
+	This is a very expensive operation both in terms of memory use
+	and computation, because it needs to parse the entire file to
+	detect any errors.
+
+	The result of the check is saved, so calling this function again
+	after a successful completion is a no-op.
+
+	If this function throws (either because of out of memory (SYSTEM),
+	or other reasons) then the file should be considered suspect.
+
+	Returns non-zero if a repair was triggered during checking, and
+	hence changes to the file may have been lost.
+*/
+int pdf_check_document(fz_context *ctx, pdf_document *doc);
+
+/*
 	down-cast a fz_document to a pdf_document.
 	Returns NULL if underlying document is not PDF
 */
@@ -205,7 +224,7 @@ pdf_page *pdf_page_from_fz_page(fz_context *ctx, fz_page *ptr);
 /*
 	Get a pdf_document handle from an fz_document handle.
 
-	This is superfically similar to pdf_document_from_fz_document
+	This is superficially similar to pdf_document_from_fz_document
 	(and the older pdf_specifics).
 
 	For fz_documents that are actually pdf_documents, this will return
@@ -282,6 +301,27 @@ typedef struct
 void pdf_layer_config_info(fz_context *ctx, pdf_document *doc, int config_num, pdf_layer_config *info);
 
 /*
+	Fetch the creator of the given layer config, or NULL if none exists.
+
+	doc: The document in question.
+
+	config_num: A value in the 0..n-1 range, where n is the
+	value returned from pdf_count_layer_configs.
+*/
+const char *pdf_layer_config_creator(fz_context *ctx, pdf_document *doc, int config_num);
+
+/*
+	Fetch the name of the given layer config, or NULL if none exists.
+
+	doc: The document in question.
+
+	config_num: A value in the 0..n-1 range, where n is the
+	value returned from pdf_count_layer_configs.
+
+*/
+const char *pdf_layer_config_name(fz_context *ctx, pdf_document *doc, int config_num);
+
+/*
 	Set the current configuration.
 	This updates the visibility of the optional content groups
 	within the document.
@@ -343,6 +383,9 @@ typedef enum
 	PDF_LAYER_UI_CHECKBOX = 1,
 	PDF_LAYER_UI_RADIOBOX = 2
 } pdf_layer_config_ui_type;
+
+const char *pdf_layer_config_ui_type_to_string(pdf_layer_config_ui_type type);
+pdf_layer_config_ui_type pdf_layer_config_ui_type_from_string(const char *str);
 
 typedef struct
 {
@@ -423,7 +466,9 @@ struct pdf_document
 	fz_stream *file;
 
 	int version;
+	int checked; /* we've checked that we don't need to repair */
 	int is_fdf;
+	int bias;
 	int64_t startxref;
 	int64_t file_size;
 	pdf_crypt *crypt;
@@ -451,11 +496,13 @@ struct pdf_document
 	int map_page_count;
 	pdf_rev_page_map *rev_page_map;
 	pdf_obj **fwd_page_map;
-	int page_tree_broken;
+	int use_page_tree_map;
 
 	int repair_attempted;
 	int repair_in_progress;
 	int non_structural_change; /* True if we are modifying the document in a way that does not change the (page) structure */
+	int struct_tree_repaired;
+	int struct_tree_result;
 
 	/* State indicating which file parsing method we are using */
 	int file_reading_linearly;
@@ -494,8 +541,6 @@ struct pdf_document
 	int hint_obj_offsets_max;
 	int64_t *hint_obj_offsets;
 
-	int resources_localised;
-
 	pdf_lexbuf_large lexbuf;
 
 	pdf_js *js;
@@ -514,6 +559,8 @@ struct pdf_document
 
 	struct {
 		fz_hash_table *fonts;
+		fz_hash_table *colorspaces;
+		fz_hash_table *images;
 	} resources;
 
 	int orphans_max;
@@ -523,6 +570,8 @@ struct pdf_document
 	fz_xml_doc *xfa;
 
 	pdf_journal *journal;
+
+	int throw_on_repair;
 };
 
 pdf_document *pdf_create_document(fz_context *ctx);
@@ -576,7 +625,7 @@ pdf_obj *pdf_graft_mapped_object(fz_context *ctx, pdf_graft_map *map, pdf_obj *o
 	destination document of the graft. This involves a deep copy
 	of the objects in question.
 
-	map: A map targetted at the document into which the page should
+	map: A map targeted at the document into which the page should
 	be inserted.
 
 	page_to: The position within the destination document at which
@@ -720,7 +769,7 @@ typedef struct
 	int do_incremental; /* Write just the changed objects. */
 	int do_pretty; /* Pretty-print dictionaries and arrays. */
 	int do_ascii; /* ASCII hex encode binary streams. */
-	int do_compress; /* Compress streams. */
+	int do_compress; /* Compress streams. 1 zlib, 2 brotli */
 	int do_compress_images; /* Compress (or leave compressed) image streams. */
 	int do_compress_fonts; /* Compress (or leave compressed) font streams. */
 	int do_decompress; /* Decompress streams (except when compressing images/fonts). */
@@ -738,6 +787,8 @@ typedef struct
 	int do_preserve_metadata; /* When cleaning, preserve metadata unchanged. */
 	int do_use_objstms; /* Use objstms if possible */
 	int compression_effort; /* 0 for default. 100 = max, 1 = min. */
+	int do_labels; /* Add labels to each object showing how it can be reached from the Root. */
+	int reproducible; /* Attempt to make operations 'reproducible'. For example, avoid writing MuPDF version number. */
 } pdf_write_options;
 
 FZ_DATA extern const pdf_write_options pdf_default_write_options;
@@ -754,6 +805,9 @@ FZ_DATA extern const pdf_write_options pdf_default_write_options;
 		s: sanitize content streams
 */
 pdf_write_options *pdf_parse_write_options(fz_context *ctx, pdf_write_options *opts, const char *args);
+
+void pdf_init_write_options(fz_context *ctx, pdf_write_options *opts);
+void pdf_apply_write_options(fz_context *ctx, pdf_write_options *opts, fz_options *args);
 
 /*
 	Returns true if there are digital signatures waiting to
@@ -869,5 +923,142 @@ int pdf_count_page_associated_files(fz_context *ctx, pdf_page *page);
 	Indexed from 0 to count-1.
 */
 pdf_obj *pdf_page_associated_file(fz_context *ctx, pdf_page *page, int idx);
+
+
+/*
+	A structure used to create "labels" for numbered objects.
+	The labels are different ways to reach an object from the trailer
+	and page tree, using the "mutool show" syntax.
+
+	Note: Paths involving "Parent", "P", "Prev", and "Last" are ignored,
+	as these are used for cycles in the structures which we don't care about
+	labeling.
+*/
+typedef struct pdf_object_labels pdf_object_labels;
+
+/*
+	Scan the entire object structure to create a directed graph
+	of indirect numbered objects and how they can reach each other.
+*/
+pdf_object_labels *pdf_load_object_labels(fz_context *ctx, pdf_document *doc);
+
+void pdf_drop_object_labels(fz_context *ctx, pdf_object_labels *g);
+
+/*
+	Enumerate all the possible labels for a given numbered object.
+	The callback is invoked with a path for each possible way the object
+	can be reached from the PDF trailer.
+*/
+typedef void (pdf_label_object_fn)(fz_context *ctx, void *arg, const char *label);
+void pdf_label_object(fz_context *ctx, pdf_object_labels *g, int num, pdf_label_object_fn *callback, void *arg);
+
+typedef enum
+{
+	PDF_STRUCT_NOT_PRESENT = 0,
+
+	/* A struct tree is present in the file. */
+	PDF_STRUCT_PRESENT = 1,
+
+	/* The struct tree is unrepairably broken. */
+	PDF_STRUCT_BROKEN = 2,
+
+	/* A problem was found, but was fixed. */
+	PDF_STRUCT_FIXED = 4,
+
+	/* The Struct tree contains attributes. */
+	PDF_STRUCT_HAS_ATTRIBUTES = 8,
+
+	/* The Struct tree contains Table attributes. */
+	PDF_STRUCT_HAS_TABLE_ATTRIBUTES = 16,
+
+	/* The Struct tree contains Table cell spanning attributes. */
+	PDF_STRUCT_HAS_TABLE_SPAN_ATTRIBUTES = 32,
+
+	/* The Struct tree contains a cycle. */
+	PDF_STRUCT_HAS_CYCLE = 64
+} pdf_check_structure_result;
+
+/*
+	Run a validation pass over the structure tree, and attempt to repair
+	any problems found. Also returns information about the state of the
+	tree.
+
+	Returns a code with bits set as above.
+*/
+pdf_check_structure_result pdf_check_structure_tree(fz_context *ctx, pdf_document *doc);
+
+/*
+	Helper functions to modify what happens when a repair is kicked off.
+	Most of the time the transparent repair magic works fine, but if a repair
+	happens this can invalidate some pointers held to internal structures.
+
+	To cope with this, we allow the document to be put into a state whereby
+	any repair will trigger an exception (FZ_ERROR_REPAIRED) after any repair.
+
+	Code can therefore use this mechanism to safely catch and retry complete
+	operations if a repair occurs.
+
+	Because this mechanism is so frequently used when altering xref_base, we
+	build the xref_base store/restore into these functions.
+
+	The pattern of code is therefore as follows:
+
+	void pdf_do_some_operation(fz_context *ctx, pdf_document *doc, ...)
+	{
+		int xref_base; // Variable to store the initial xref_base value
+		int repaired = 0;
+
+	retry_on_repair:
+		pdf_start_throw_on_repair(ctx, doc, &xref_base);
+
+		fz_try(ctx)
+		{
+			// Actual operation goes here. This may involved changing
+			// doc->xref_base. e.g. doc->xref_base = initial
+		}
+		fz_always(ctx)
+			pdf_end_throw_on_repair(ctx, doc, xref_base);
+		fz_catch(ctx)
+		{
+			if (fz_caught(ctx) == FZ_ERROR_REPAIRED)
+			{
+				fz_report_error(ctx);
+				repaired = 1;
+				// doc->xref_base will always have been reset to be something legal
+				// here, but if you have been passed in an xref level to operate at
+				// you may want to check that that level is still valid here!
+				// e.g. if (initial >= doc->num_xref_sections) return;
+				goto retry_on_repair;
+			}
+			fz_rethrow(ctx);
+		}
+
+		// If we repaired, then we swallowed the exception. There may have been callers above
+		// us that were wanting to be informed. This call takes care of that if required.
+		if (repaired)
+			pdf_maybe_throw_after_repair(ctx, doc);
+	}
+*/
+
+/*
+	Prepare for an operation that can't easily be interrupted by a repair, and should
+	instead be retried.
+
+	See above for example code.
+*/
+void pdf_start_throw_on_repair(fz_context *ctx, pdf_document *doc, int *xref_base);
+
+/*
+	Mark the end of an operation that can't easily be interrupted by a repair, and
+	should instead be retried.
+
+	See above for example code.
+*/
+void pdf_end_throw_on_repair(fz_context *ctx, pdf_document *doc, int xref_base);
+
+/*
+	If a caller of ours is expecting an exception on a repair, give them one.
+*/
+void pdf_maybe_throw_after_repair(fz_context *ctx, pdf_document *doc);
 
 #endif

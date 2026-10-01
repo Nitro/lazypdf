@@ -306,7 +306,7 @@ func TestPdfHandler_AddTextBoxToPage_InvalidTextLengh(t *testing.T) {
 	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
 
 	params := TextParams{
-		Value: strings.Repeat("a", 301),
+		Value: strings.Repeat("a", 501),
 		Page:  0,
 		Location: Location{
 			X: 0.0,
@@ -324,7 +324,46 @@ func TestPdfHandler_AddTextBoxToPage_InvalidTextLengh(t *testing.T) {
 
 	err = handler.AddTextBoxToPage(document, params)
 	require.Error(t, err)
-	require.Equal(t, "failure at the C/MuPDF add_text_to_page function: Text exceeds maximum allowed size. Expected: 300, Actual: 301", err.Error())
+	require.Equal(t, "failure at the C/MuPDF add_text_to_page function: Text exceeds maximum allowed size. Expected: 500, Actual: 501", err.Error())
+}
+
+// The limit counts characters, not bytes, so multi-byte text is allowed the same
+// number of characters as ASCII text.
+func TestPdfHandler_AddTextBoxToPage_MultiByteTextAtLimit(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	handler := PdfHandler{Logger: logger}
+
+	file, err := os.Open("testdata/pdf_handler_sample.pdf")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, file.Close()) }()
+
+	document, err := handler.OpenPDF(file)
+	if err != nil {
+		t.Fatalf("OpenPDF: %v", err)
+	}
+	defer func() { require.NoError(t, handler.ClosePDF(document)) }()
+
+	// 500 characters, 1500 bytes in UTF-8.
+	params := TextParams{
+		Value: strings.Repeat("漢", 500),
+		Page:  0,
+		Location: Location{
+			X: 0.0,
+			Y: 0.0,
+		},
+		Size: Size{
+			Width:  443,
+			Height: 12,
+		},
+		Font: struct {
+			Family string
+			Size   float64
+		}{Family: "Times New Roman", Size: 12},
+	}
+
+	require.NoError(t, handler.AddTextBoxToPage(document, params))
 }
 
 func TestPdfHandler_AddTextBoxToPage_InvalidFont(t *testing.T) {

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2026 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -215,6 +215,12 @@ fz_buffer *fz_read_file(fz_context *ctx, const char *filename);
 fz_buffer *fz_try_read_file(fz_context *ctx, const char *filename);
 
 /**
+	Read all the contents of a file into a string.
+	File should be UTF-8 encoded plain text.
+*/
+char *fz_read_text_file(fz_context *ctx, const char *filename);
+
+/**
 	fz_read_[u]int(16|24|32|64)(_le)?
 
 	Read a 16/32/64 bit signed/unsigned integer from stream,
@@ -398,13 +404,14 @@ void fz_skip_space(fz_context *ctx, fz_stream *stm);
 */
 static inline size_t fz_available(fz_context *ctx, fz_stream *stm, size_t max)
 {
-	size_t len = stm->wp - stm->rp;
+	size_t len;
 	int c = EOF;
 
+	if (stm == NULL || stm->eof)
+		return 0;
+	len = stm->wp - stm->rp;
 	if (len)
 		return len;
-	if (stm->eof)
-		return 0;
 
 	fz_try(ctx)
 		c = stm->next(ctx, stm, max);
@@ -534,7 +541,7 @@ static inline int fz_is_eof(fz_context *ctx, fz_stream *stm)
 */
 static inline unsigned int fz_read_bits(fz_context *ctx, fz_stream *stm, int n)
 {
-	int x;
+	unsigned int x;
 
 	if (n <= stm->avail)
 	{

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -235,7 +235,7 @@ typedef struct
 #define FZ_AES_ENCRYPT 1
 
 /**
-	AES encryption intialisation. Fills in the supplied context
+	AES encryption initialization. Fills in the supplied context
 	and prepares for encryption using the given key.
 
 	Returns non-zero for error (key size other than 128/192/256).
@@ -245,7 +245,7 @@ typedef struct
 int fz_aes_setkey_enc(fz_aes *ctx, const unsigned char *key, int keysize);
 
 /**
-	AES decryption intialisation. Fills in the supplied context
+	AES decryption initialization. Fills in the supplied context
 	and prepares for decryption using the given key.
 
 	Returns non-zero for error (key size other than 128/192/256).
@@ -266,5 +266,18 @@ void fz_aes_crypt_cbc(fz_aes *ctx, int mode, size_t length,
 	unsigned char iv[16],
 	const unsigned char *input,
 	unsigned char *output );
+
+/* ## ChaCha20 stream cipher (RFC 7539) */
+
+/* The ChaCha20 state is a vector of sixteen 32-bit words. Word 12 is the block counter. */
+typedef struct fz_chacha20 {
+	uint32_t s[16];
+} fz_chacha20;
+
+/* Setup ChaCha20 stream cipher with 256-bit key, 96-bit nonce, and counter. */
+void fz_chacha20_init(fz_chacha20 *stm, unsigned char *key, unsigned char *nonce, uint32_t counter);
+
+/* Encrypt bytes with ChaCha20 stream cipher. */
+void fz_chacha20_encrypt(fz_chacha20 *seed, unsigned char *dst, const unsigned char *src, uint32_t size);
 
 #endif

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2024 Artifex Software, Inc.
+// Copyright (C) 2004-2025 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -29,6 +29,8 @@ typedef struct pdf_document pdf_document;
 typedef struct pdf_crypt pdf_crypt;
 typedef struct pdf_journal pdf_journal;
 
+typedef struct pdf_resource_stack pdf_resource_stack;
+
 /* Defined in PDF 1.7 according to Acrobat limit. */
 #define PDF_MAX_OBJECT_NUMBER 8388607
 #define PDF_MAX_GEN_NUMBER 65535
@@ -51,7 +53,7 @@ pdf_obj *pdf_new_string(fz_context *ctx, const char *str, size_t len);
 	In theory, we could also use PDFDocEncoding.
 */
 pdf_obj *pdf_new_text_string(fz_context *ctx, const char *s);
-pdf_obj *pdf_new_indirect(fz_context *ctx, pdf_document *doc, int num, int gen);
+pdf_obj *pdf_new_indirect(fz_context *ctx, pdf_document *doc, int64_t num, int gen);
 pdf_obj *pdf_new_array(fz_context *ctx, pdf_document *doc, int initialcap);
 pdf_obj *pdf_new_dict(fz_context *ctx, pdf_document *doc, int initialcap);
 pdf_obj *pdf_new_point(fz_context *ctx, pdf_document *doc, fz_point point);
@@ -65,6 +67,7 @@ pdf_obj *pdf_deep_copy_obj(fz_context *ctx, pdf_obj *obj);
 pdf_obj *pdf_keep_obj(fz_context *ctx, pdf_obj *obj);
 void pdf_drop_obj(fz_context *ctx, pdf_obj *obj);
 pdf_obj *pdf_drop_singleton_obj(fz_context *ctx, pdf_obj *obj);
+int pdf_obj_is_singleton(fz_context *ctx, pdf_obj *obj);
 
 int pdf_is_null(fz_context *ctx, pdf_obj *obj);
 int pdf_is_bool(fz_context *ctx, pdf_obj *obj);
@@ -76,6 +79,12 @@ int pdf_is_string(fz_context *ctx, pdf_obj *obj);
 int pdf_is_array(fz_context *ctx, pdf_obj *obj);
 int pdf_is_dict(fz_context *ctx, pdf_obj *obj);
 int pdf_is_indirect(fz_context *ctx, pdf_obj *obj);
+
+/*
+	If obj is an indirect object, return it. If not,
+	throw an error.
+*/
+pdf_obj *pdf_ensure_indirect(fz_context *ctx, pdf_obj *obj);
 
 /*
 	Check if an object is a stream or not.
@@ -105,12 +114,19 @@ struct pdf_cycle_list {
 	pdf_cycle_list *up;
 	int num;
 };
+/*
+	Check for a cycle (or stack overflow) in PDF structures.
+
+	Returns 1 if a cycle found.
+	Returns -1 if we pass some arbitrary depth (currently 256).
+	Otherwise returns 0.
+*/
 int pdf_cycle(fz_context *ctx, pdf_cycle_list *here, pdf_cycle_list *prev, pdf_obj *obj);
 
 typedef struct
 {
 	int len;
-	unsigned char bits[1];
+	unsigned char bits[FZ_FLEXIBLE_ARRAY];
 } pdf_mark_bits;
 
 pdf_mark_bits *pdf_new_mark_bits(fz_context *ctx, pdf_document *doc);
@@ -437,5 +453,7 @@ void pdf_add_journal_fragment(fz_context *ctx, pdf_document *doc, int parent, pd
 
 char *pdf_format_date(fz_context *ctx, int64_t time, char *s, size_t n);
 int64_t pdf_parse_date(fz_context *ctx, const char *s);
+
+int pdf_is_image_stream(fz_context *ctx, pdf_obj *obj);
 
 #endif
