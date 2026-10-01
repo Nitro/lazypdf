@@ -29,10 +29,10 @@ jobs:
       - uses: snyk/actions/setup@master
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22.4"
+          go-version: "1.26.7"
 
       - name: Exec ${{ matrix.target }}
         env:
           SNYK_TOKEN: ${{ secrets.sn_x_pub }}
           SNYK_API: https://app.eu.snyk.io/api
-        run: ${{ matrix.cmd }} --org=wapadi
+        run: ${{ matrix.cmd }} --org=sign-aande

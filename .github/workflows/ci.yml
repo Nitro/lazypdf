@@ -22,7 +22,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.23.6
+          go-version: 1.26.7
           # Its built-in cache is keyed on go.sum only; the "Go cache" step below also keys on the MuPDF version.
           cache: false
 
